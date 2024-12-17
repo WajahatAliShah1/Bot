@@ -213,24 +213,22 @@ const setupDiscordBot = async () => {
       // Send messages based on event type
       if (eventType === "Item Listed") {
         await mainChannel.send({ embeds: [embed] });
-        logger.success(`Embed message sent to Main Channel.`);
+        logger.success(`Send embed message to Main Channel.`);
 
         // Log for good deal if applicable
         if (isGoodDeal) {
           logger.success(`Recognized as a Good Deal! Sending to Good Deals Channel.`);
           await goodDealsChannel.send({ embeds: [embed] });
-          logger.success(`Embed message sent to Good Deals Channel.`);
+          logger.success(`Send embed message to Good Deals Channel.`);
         }
       } else if (eventType === "Item Sold") {
         await salesChannel.send({ embeds: [embed] });
-        logger.success(`Embed message sent to Sales Channel.`);
+        logger.success(`Send embed message to Sales Channel.`);
       }
     } catch (error) {
       logger.error("Error while processing event:", error);
     }
   });
-
-  logger.success("Connected to OpenSea Stream API.");
   logger.success("Discord bot is connected and ready to receive events!");
 };
 
