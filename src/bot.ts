@@ -151,7 +151,7 @@ const setupStreamClient = (
 
   const handleStreamEvent = async (eventType: string, payload: any) => {
     try {
-      logger.info(`✅ ${eventType} Event Received`);
+      logger.info(`👍 ${eventType} Event Received`);
       await onEvent(eventType, payload);
     } catch (error) {
       logger.error(`Error handling ${eventType} event:`, error);
@@ -217,7 +217,9 @@ const setupDiscordBot = async () => {
 
         // Log for good deal if applicable
         if (isGoodDeal) {
-          logger.success(`Recognized as a Good Deal! Sending to Good Deals Channel.`);
+          logger.success(
+            `Recognized as a Good Deal! Sending to Good Deals Channel.`
+          );
           await goodDealsChannel.send({ embeds: [embed] });
           logger.success(`Send embed message to Good Deals Channel.`);
         }
@@ -234,4 +236,3 @@ const setupDiscordBot = async () => {
 
 // Start the Bot
 setupDiscordBot().catch((error) => logger.error("Bot setup failed:", error));
-
