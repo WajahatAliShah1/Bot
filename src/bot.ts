@@ -19,16 +19,6 @@ const CONFIG = {
   COLLECTION_SLUG: process.env.COLLECTION_SLUG!,
 };
 
-// Logger Utility
-const logger = {
-  info: (message: string, ...args: any[]) =>
-    console.log(`ℹ️  ${message}`, ...args),
-  error: (message: string, ...args: any[]) =>
-    console.error(`❌ ${message}`, ...args),
-  success: (message: string, ...args: any[]) =>
-    console.log(`✅ ${message}`, ...args),
-};
-
 // Retry Helper
 const retry = async (
   fn: () => Promise<any>,
@@ -179,12 +169,24 @@ const setupStreamClient = (
   logger.success("Connected to OpenSea Stream API.");
 };
 
+// Logger Utility
+const logger = {
+  info: (message: string, ...args: any[]) =>
+    console.log(`ℹ️  ${message}`, ...args),
+  success: (message: string, ...args: any[]) =>
+    console.log(`✅ ${message}`, ...args),
+  error: (message: string, ...args: any[]) =>
+    console.error(`❌ ${message}`, ...args),
+};
+
 // Main Discord Bot Setup
 const setupDiscordBot = async () => {
   const discordBot = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
   });
+
   await discordBot.login(CONFIG.DISCORD_BOT_TOKEN);
+  logger.success("Discord bot logged in successfully.");
 
   const mainChannel = (await discordBot.channels.fetch(
     CONFIG.DISCORD_CHANNEL_ID
@@ -196,19 +198,42 @@ const setupDiscordBot = async () => {
     CONFIG.SALES_CHANNEL_ID
   )) as TextChannel;
 
-  setupStreamClient(async (eventType, payload) => {
-    const { embed, isGoodDeal } = await buildEmbedMessage(eventType, payload);
+  logger.success("Channels fetched successfully.");
 
-    if (eventType === "Item Listed") {
-      await mainChannel.send({ embeds: [embed] });
-      if (isGoodDeal) await goodDealsChannel.send({ embeds: [embed] });
-    } else if (eventType === "Item Sold") {
-      await salesChannel.send({ embeds: [embed] });
+  // Setup OpenSea Stream Event Handling
+  setupStreamClient(async (eventType, payload) => {
+    try {
+      logger.info(`🔍 Recognized Event: "${eventType}"`);
+
+      // Building embed message
+      logger.info(`🚧 Building embed message for "${eventType}"...`);
+      const { embed, isGoodDeal } = await buildEmbedMessage(eventType, payload);
+      logger.success(`Created embed message for "${eventType}".`);
+
+      // Send messages based on event type
+      if (eventType === "Item Listed") {
+        await mainChannel.send({ embeds: [embed] });
+        logger.success(`Embed message sent to Main Channel.`);
+
+        // Log for good deal if applicable
+        if (isGoodDeal) {
+          logger.success(`Recognized as a Good Deal! Sending to Good Deals Channel.`);
+          await goodDealsChannel.send({ embeds: [embed] });
+          logger.success(`Embed message sent to Good Deals Channel.`);
+        }
+      } else if (eventType === "Item Sold") {
+        await salesChannel.send({ embeds: [embed] });
+        logger.success(`Embed message sent to Sales Channel.`);
+      }
+    } catch (error) {
+      logger.error("Error while processing event:", error);
     }
   });
 
-  logger.success("Discord bot connected and ready!");
+  logger.success("Connected to OpenSea Stream API.");
+  logger.success("Discord bot is connected and ready to receive events!");
 };
 
 // Start the Bot
 setupDiscordBot().catch((error) => logger.error("Bot setup failed:", error));
+
