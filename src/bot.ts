@@ -136,6 +136,7 @@ export const buildEmbedMessage = async (
 };
 
 // Function to Setup OpenSea Stream
+// Function to Setup OpenSea Stream
 const setupStreamClient = (
   onEvent: (eventType: string, payload: any) => void
 ) => {
@@ -148,23 +149,35 @@ const setupStreamClient = (
   const collectionSlug = process.env.COLLECTION_SLUG!;
 
   console.log("🔄 Connecting to OpenSea Stream API...");
+
+  // Listen for Item Listed
   client.onItemListed(collectionSlug, async (event) => {
     try {
       console.log("✅ Item Listed Event Received");
       console.log("🔍 Event Payload:", JSON.stringify(event, null, 2));
-
-      // Save payload to file for debugging
-      fs.writeFileSync("payload.txt", JSON.stringify(event, null, 2));
-
+      fs.writeFileSync("payload.txt", JSON.stringify(event, null, 2)); // Save payload
       await onEvent("Item Listed", event.payload);
     } catch (error) {
       console.error("❌ Error handling Item Listed event:", error);
     }
   });
 
+  // Listen for Item Sold
+  client.onItemSold(collectionSlug, async (event) => {
+    try {
+      console.log("✅ Item Sold Event Received");
+      console.log("🔍 Event Payload:", JSON.stringify(event, null, 2));
+      fs.writeFileSync("payload_sold.txt", JSON.stringify(event, null, 2)); // Save payload
+      await onEvent("Item Sold", event.payload);
+    } catch (error) {
+      console.error("❌ Error handling Item Sold event:", error);
+    }
+  });
+
   client.connect();
   console.log("✅ Connected to OpenSea Stream API.");
 };
+
 
 // Main Bot Setup
 const setupDiscordBot = async () => {
