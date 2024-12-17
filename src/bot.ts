@@ -53,7 +53,16 @@ export const buildEmbedMessage = async (
 ): Promise<{ embed: EmbedBuilder; isGoodDeal: boolean }> => {
   console.log("🔍 Building Embed - Event Type:", eventType);
 
-  const { item = {}, base_price = null, payment_token = {} } = payload || {};
+  const {
+    item = {},
+    base_price = null,
+    payment_token = {},
+    maker = {},
+    taker = null,
+    sale_price = null,
+    transaction = {},
+  } = payload || {};
+
   const nftName = item?.metadata?.name || "Unnamed NFT";
   const imageUrl =
     item?.metadata?.image_url ||
@@ -89,11 +98,20 @@ export const buildEmbedMessage = async (
   console.log(`✅ Calculated Overall: ${overall}`);
 
   // Price calculations
-  const priceInETH = base_price ? Number(base_price) / 1e18 : 0;
+  const priceInETH =
+    eventType === "Item Sold"
+      ? sale_price
+        ? Number(sale_price) / 1e18
+        : 0
+      : base_price
+      ? Number(base_price) / 1e18
+      : 0;
+
   const priceInETHString = priceInETH.toFixed(4);
   const usdPricePerETH = payment_token?.usd_price
     ? Number(payment_token.usd_price)
     : 0;
+
   const priceInUSD =
     priceInETH && usdPricePerETH > 0
       ? `$${(priceInETH * usdPricePerETH).toFixed(2)}`
@@ -106,9 +124,28 @@ export const buildEmbedMessage = async (
 
   console.log(`🟢 Is this a Good Deal? ${isGoodDeal ? "YES" : "NO"}`);
 
+  // Shorten wallet addresses
+  const shortenAddress = (address: string) =>
+    address ? `${address.slice(0, 4)}...${address.slice(-4)}` : "N/A";
+
+  const fromWallet = maker?.address
+    ? `[${shortenAddress(maker.address)}](https://etherscan.io/address/${
+        maker.address
+      })`
+    : "N/A";
+  const toWallet = taker?.address
+    ? `[${shortenAddress(taker.address)}](https://etherscan.io/address/${
+        taker.address
+      })`
+    : "N/A";
+
+  const transactionHash = transaction?.hash
+    ? `[View Transaction](https://etherscan.io/tx/${transaction.hash})`
+    : "N/A";
+
   // Build Embed
   const embed = new EmbedBuilder()
-    .setColor("#0099ff")
+    .setColor(eventType === "Item Sold" ? "#ff4500" : "#0099ff") // Different color for sold items
     .setTitle(`${nftName} - ${eventType}`)
     .setURL(assetUrl)
     .setThumbnail(imageUrl)
@@ -124,18 +161,26 @@ export const buildEmbedMessage = async (
     .addFields(
       { name: "Finish", value: `${finish}`, inline: true },
       { name: "Vision", value: `${vision}`, inline: true }
-    )
-    .setTimestamp(new Date())
-    .setFooter({
-      text: "OpenSea Stream API",
-      iconURL:
-        "https://files.readme.io/566c72b-opensea-logomark-full-colored.png",
-    });
+    );
+
+  // Add From and To fields for Item Sold
+  if (eventType === "Item Sold") {
+    embed.addFields(
+      { name: "From", value: fromWallet, inline: true },
+      { name: "To", value: toWallet, inline: true },
+      { name: "Transaction", value: transactionHash, inline: false }
+    );
+  }
+
+  embed.setTimestamp(new Date()).setFooter({
+    text: "OpenSea Stream API",
+    iconURL:
+      "https://files.readme.io/566c72b-opensea-logomark-full-colored.png",
+  });
 
   return { embed, isGoodDeal };
 };
 
-// Function to Setup OpenSea Stream
 // Function to Setup OpenSea Stream
 const setupStreamClient = (
   onEvent: (eventType: string, payload: any) => void
@@ -147,7 +192,6 @@ const setupStreamClient = (
   });
 
   const collectionSlug = process.env.COLLECTION_SLUG!;
-
   console.log("🔄 Connecting to OpenSea Stream API...");
 
   // Listen for Item Listed
@@ -155,10 +199,13 @@ const setupStreamClient = (
     try {
       console.log("✅ Item Listed Event Received");
       console.log("🔍 Event Payload:", JSON.stringify(event, null, 2));
-      fs.writeFileSync("payload.txt", JSON.stringify(event, null, 2)); // Save payload
       await onEvent("Item Listed", event.payload);
-    } catch (error) {
-      console.error("❌ Error handling Item Listed event:", error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("❌ Error handling Item Listed event:", error.message);
+      } else {
+        console.error("❌ Unknown error occurred:", error);
+      }
     }
   });
 
@@ -167,17 +214,19 @@ const setupStreamClient = (
     try {
       console.log("✅ Item Sold Event Received");
       console.log("🔍 Event Payload:", JSON.stringify(event, null, 2));
-      fs.writeFileSync("payload_sold.txt", JSON.stringify(event, null, 2)); // Save payload
       await onEvent("Item Sold", event.payload);
-    } catch (error) {
-      console.error("❌ Error handling Item Sold event:", error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("❌ Error handling Item Sold event:", error.message);
+      } else {
+        console.error("❌ Unknown error occurred:", error);
+      }
     }
   });
 
   client.connect();
   console.log("✅ Connected to OpenSea Stream API.");
 };
-
 
 // Main Bot Setup
 const setupDiscordBot = async () => {
@@ -192,8 +241,13 @@ const setupDiscordBot = async () => {
     process.env.GOOD_DEALS_CHANNEL_ID!
   )) as TextChannel;
 
+  const salesChannel = (await discordBot.channels.fetch(
+    process.env.SALES_CHANNEL_ID!
+  )) as TextChannel;
+
   if (!mainChannel) throw new Error("❌ Main channel not found.");
   if (!goodDealsChannel) throw new Error("❌ Good Deals channel not found.");
+  if (!salesChannel) throw new Error("❌ Sales channel not found.");
 
   // Handle Stream Events
   setupStreamClient(async (eventType, payload) => {
@@ -201,7 +255,7 @@ const setupDiscordBot = async () => {
 
     try {
       console.log("🚧 Building Embed for Event...");
-      const result = await buildEmbedMessage(eventType, payload); // Await for embed and good deal flag
+      const result = await buildEmbedMessage(eventType, payload); // Await embed and good deal flag
       embed = result.embed;
       isGoodDeal = result.isGoodDeal;
       console.log("✅ Embed built successfully.");
@@ -212,6 +266,7 @@ const setupDiscordBot = async () => {
 
     try {
       console.log("📨 Sending embed to Discord...");
+
       if (eventType === "Item Listed") {
         // Send to Main Channel
         await mainChannel.send({ embeds: [embed] });
@@ -223,6 +278,11 @@ const setupDiscordBot = async () => {
           await goodDealsChannel.send({ embeds: [embed] });
           console.log("✅ Embed sent to Good Deals channel.");
         }
+      } else if (eventType === "Item Sold") {
+        // Send to Sales Channel
+        console.log("🔴 Sending embed to Sales channel...");
+        await salesChannel.send({ embeds: [embed] });
+        console.log("✅ Embed sent to Sales channel.");
       }
     } catch (error) {
       console.error("❌ Error sending embed to Discord:", error);
