@@ -1,0 +1,10 @@
+### Connect to OpenSea WebSocket
+GET wss://stream.opensea.io/socket
+X-API-KEY: b57f133359de446fb8c0e5737bfa16bf
+
+### Subscribe to Events
+{
+  "method": "subscribe",
+  "topic": "collection:rumble-kong-league",
+  "event": "item_listed"
+}
