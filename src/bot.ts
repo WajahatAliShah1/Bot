@@ -18,30 +18,36 @@ const discordBot = new Client({
 const fetchAssetDetails = async (
   chain: string,
   contractAddress: string,
-  tokenId: string
+  tokenId: string,
+  retries = 3
 ) => {
   try {
     const url = `https://api.opensea.io/api/v2/chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`;
-    console.log("🔍 Fetching asset details from OpenSea API v2:", url);
+    console.log("🔍 Fetching asset details:", url);
 
     const response = await axios.get(url, {
       headers: {
         Accept: "application/json",
-        "x-api-key": process.env.OPENSEA_API_KEY || "", // Use OpenSea API key
+        "x-api-key": process.env.OPENSEA_API_KEY || "",
       },
+      timeout: 10000, // Set 10 seconds timeout
     });
 
     return response.data.nft.traits || [];
   } catch (error) {
     if (error instanceof AxiosError) {
-      // Safely access AxiosError properties
       console.error(
-        "❌ Failed to fetch asset details:",
-        error.response?.status,
+        `❌ Request failed (Status: ${error.response?.status}):`,
         error.response?.data
       );
     } else {
       console.error("❌ Unknown error:", error);
+    }
+
+    if (retries > 0) {
+      console.log(`🔄 Retrying... (${4 - retries}/3)`);
+      await new Promise((res) => setTimeout(res, 2 ** (4 - retries) * 1000));
+      return fetchAssetDetails(chain, contractAddress, tokenId, retries - 1);
     }
     return [];
   }
