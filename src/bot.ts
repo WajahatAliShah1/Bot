@@ -12,8 +12,8 @@ import axios, { AxiosError } from "axios";
 // Configuration Object
 const CONFIG = {
   DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN!,
-  DISCORD_CHANNEL_ID: process.env.DISCORD_CHANNEL_ID!,
-  GOOD_DEALS_CHANNEL_ID: process.env.GOOD_DEALS_CHANNEL_ID!,
+  NEW_LISTINGS_CHANNEL_ID: process.env.NEW_LISTINGS_CHANNEL_ID!,
+  NINETYPLUS_DEAL_CHANNEL_ID: process.env.NINETYPLUS_DEAL_CHANNEL_ID!,
   SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID!,
   OPENSEA_API_KEY: process.env.OPENSEA_API_KEY!,
   COLLECTION_SLUG: process.env.COLLECTION_SLUG!,
@@ -139,7 +139,13 @@ export const buildEmbedMessage = async (
   return { embed, isGoodDeal };
 };
 
-// OpenSea Stream Setup
+// Cache to Track Processed Listings
+const listingCache = new Map<string, { price: string; seller: string }>();
+
+// Helper to Generate Unique Key for Listings
+const generateKey = (nftId: string) => nftId;
+
+// OpenSea Stream Setup with Duplicate Detection
 const setupStreamClient = (
   onEvent: (eventType: string, payload: any) => void
 ) => {
@@ -151,8 +157,26 @@ const setupStreamClient = (
 
   const handleStreamEvent = async (eventType: string, payload: any) => {
     try {
-      logger.info(`👍 ${eventType} Event Received`);
-      await onEvent(eventType, payload);
+      const nftId = payload?.item?.nft_id || "";
+      const price = payload?.base_price || payload?.sale_price || "0";
+      const seller = payload?.maker?.address || "unknown";
+
+      if (!nftId) return; // Skip if NFT ID is missing
+
+      const key = generateKey(nftId);
+      const cachedEntry = listingCache.get(key);
+
+      // Check for duplicates: skip if price and seller are unchanged
+      if (cachedEntry && cachedEntry.price === price && cachedEntry.seller === seller) {
+        logger.info(`🔄 Duplicate listing detected for NFT ID: ${nftId}. Skipping.`);
+        return;
+      }
+
+      // Update the cache with new price and seller
+      listingCache.set(key, { price, seller });
+      logger.info(`✅ Processing new listing for NFT ID: ${nftId}.`);
+
+      await onEvent(eventType, payload); // Proceed with event processing
     } catch (error) {
       logger.error(`Error handling ${eventType} event:`, error);
     }
@@ -168,6 +192,7 @@ const setupStreamClient = (
   client.connect();
   logger.success("Connected to OpenSea Stream API.");
 };
+
 
 // Logger Utility
 const logger = {
@@ -189,10 +214,10 @@ const setupDiscordBot = async () => {
   logger.success("Discord bot logged in successfully.");
 
   const mainChannel = (await discordBot.channels.fetch(
-    CONFIG.DISCORD_CHANNEL_ID
+    CONFIG.NEW_LISTINGS_CHANNEL_ID
   )) as TextChannel;
   const goodDealsChannel = (await discordBot.channels.fetch(
-    CONFIG.GOOD_DEALS_CHANNEL_ID
+    CONFIG.NINETYPLUS_DEAL_CHANNEL_ID
   )) as TextChannel;
   const salesChannel = (await discordBot.channels.fetch(
     CONFIG.SALES_CHANNEL_ID
