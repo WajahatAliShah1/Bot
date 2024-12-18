@@ -15,6 +15,7 @@ const CONFIG = {
   NEW_LISTINGS_CHANNEL_ID: process.env.NEW_LISTINGS_CHANNEL_ID!,
   NINETYPLUS_DEAL_CHANNEL_ID: process.env.NINETYPLUS_DEAL_CHANNEL_ID!,
   SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID!,
+  BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID!,
   OPENSEA_API_KEY: process.env.OPENSEA_API_KEY!,
   COLLECTION_SLUG: process.env.COLLECTION_SLUG!,
 };
@@ -34,6 +35,28 @@ const retry = async (
       return retry(fn, retries - 1, delay * 2);
     }
     throw error;
+  }
+};
+
+const fetchCollectionFloorPrice = async (
+  collectionSlug: string
+): Promise<number | null> => {
+  const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
+  console.info("🔍 Fetching collection stats:", url);
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Accept: "application/json",
+        "x-api-key": process.env.OPENSEA_API_KEY,
+      },
+      timeout: 10000,
+    });
+    // Adjusted to match the actual structure of the API response
+    return response.data.total.floor_price || null;
+  } catch (error) {
+    console.error("❌ Error fetching collection stats:", error);
+    return null;
   }
 };
 
@@ -62,7 +85,11 @@ const fetchAssetDetails = async (
 export const buildEmbedMessage = async (
   eventType: string,
   payload: any
-): Promise<{ embed: EmbedBuilder; isGoodDeal: boolean }> => {
+): Promise<{
+  embed: EmbedBuilder;
+  isGoodNinety: boolean;
+  isBelowFloor: boolean;
+}> => {
   const {
     item = {},
     base_price = null,
@@ -100,8 +127,15 @@ export const buildEmbedMessage = async (
   const priceInUSD = payment_token?.usd_price
     ? `$${(priceInETH * payment_token.usd_price).toFixed(2)}`
     : "N/A";
-  const isGoodDeal =
-    priceInETH < 0.35 &&
+
+  const floorPrice = await fetchCollectionFloorPrice(CONFIG.COLLECTION_SLUG);
+  const tolerance = 0.0001; // Small tolerance for floating-point comparisons
+  const isBelowFloor =
+    eventType === "Item Listed" &&
+    floorPrice !== null &&
+    priceInETH < floorPrice - tolerance;
+  const isGoodNinety =
+    priceInETH < 1 &&
     [shooting, defense, finish, vision].some((stat) => stat >= 90);
 
   const embed = new EmbedBuilder()
@@ -120,7 +154,12 @@ export const buildEmbedMessage = async (
       { name: "Shooting", value: `${shooting}`, inline: true },
       { name: "Defense", value: `${defense}`, inline: true },
       { name: "Finish", value: `${finish}`, inline: true },
-      { name: "Vision", value: `${vision}`, inline: true }
+      { name: "Vision", value: `${vision}`, inline: true },
+      {
+        name: "Floor Price",
+        value: floorPrice !== null ? `${floorPrice.toFixed(4)} ETH` : "N/A",
+        inline: false,
+      }
     );
 
   if (eventType === "Item Sold") {
@@ -136,7 +175,7 @@ export const buildEmbedMessage = async (
     );
   }
 
-  return { embed, isGoodDeal };
+  return { embed, isGoodNinety, isBelowFloor };
 };
 
 // Cache to Track Processed Listings (Per Unique NFT ID)
@@ -218,7 +257,7 @@ const setupDiscordBot = async () => {
   await discordBot.login(CONFIG.DISCORD_BOT_TOKEN);
   logger.success("Discord bot logged in successfully.");
 
-  const mainChannel = (await discordBot.channels.fetch(
+  const newListingChannel = (await discordBot.channels.fetch(
     CONFIG.NEW_LISTINGS_CHANNEL_ID
   )) as TextChannel;
   const goodDealsChannel = (await discordBot.channels.fetch(
@@ -226,6 +265,9 @@ const setupDiscordBot = async () => {
   )) as TextChannel;
   const salesChannel = (await discordBot.channels.fetch(
     CONFIG.SALES_CHANNEL_ID
+  )) as TextChannel;
+  const belowFloorChannel = (await discordBot.channels.fetch(
+    CONFIG.BELOW_FLOOR_LISTING_CHANNEL_ID
   )) as TextChannel;
 
   logger.success("Channels fetched successfully.");
@@ -237,22 +279,32 @@ const setupDiscordBot = async () => {
 
       // Building embed message
       logger.info(`🚧 Building embed message for "${eventType}"...`);
-      const { embed, isGoodDeal } = await buildEmbedMessage(eventType, payload);
+      const { embed, isGoodNinety, isBelowFloor } = await buildEmbedMessage(
+        eventType,
+        payload
+      );
       logger.success(`Created embed message for "${eventType}".`);
 
       // Send messages based on event type
       if (eventType === "Item Listed") {
-        await mainChannel.send({ embeds: [embed] });
-        logger.success(`Send embed message to Main Channel.`);
+        await newListingChannel.send({ embeds: [embed] });
+        logger.success(`Send embed message to New Listing Channel Channel.`);
 
         // Log for good deal if applicable
-        if (isGoodDeal) {
+        if (isGoodNinety) {
           logger.success(
-            `Recognized as a Good Deal! Sending to Good Deals Channel.`
+            `Recognized as a Good Deal 90! Sending to Good Deals 90 Channel.`
           );
           await goodDealsChannel.send({ embeds: [embed] });
-          logger.success(`Send embed message to Good Deals Channel.`);
+          logger.success(`Send embed message to Good Deal 90 Channel.`);
         }
+      }
+      if (isBelowFloor) {
+        logger.success(
+          `Listing is below floor price! Sending to Below Floor Listings Channel.`
+        );
+        await belowFloorChannel.send({ embeds: [embed] });
+        logger.success(`Sent embed message to Below Floor Listings Channel.`);
       } else if (eventType === "Item Sold") {
         await salesChannel.send({ embeds: [embed] });
         logger.success(`Send embed message to Sales Channel.`);
