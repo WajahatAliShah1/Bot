@@ -139,7 +139,7 @@ export const buildEmbedMessage = async (
   return { embed, isGoodDeal };
 };
 
-// Cache to Track Processed Listings
+// Cache to Track Processed Listings (Per Unique NFT ID)
 const listingCache = new Map<string, { price: string; seller: string }>();
 
 // Helper to Generate Unique Key for Listings
@@ -163,12 +163,18 @@ const setupStreamClient = (
 
       if (!nftId) return; // Skip if NFT ID is missing
 
-      const key = generateKey(nftId);
+      const key = nftId; // Unique key per NFT ID
       const cachedEntry = listingCache.get(key);
 
       // Check for duplicates: skip if price and seller are unchanged
-      if (cachedEntry && cachedEntry.price === price && cachedEntry.seller === seller) {
-        logger.info(`🔄 Duplicate listing detected for NFT ID: ${nftId}. Skipping.`);
+      if (
+        cachedEntry &&
+        cachedEntry.price === price &&
+        cachedEntry.seller === seller
+      ) {
+        logger.info(
+          `🔄 Duplicate listing detected for NFT ID: ${nftId}. Skipping.`
+        );
         return;
       }
 
@@ -192,7 +198,6 @@ const setupStreamClient = (
   client.connect();
   logger.success("Connected to OpenSea Stream API.");
 };
-
 
 // Logger Utility
 const logger = {
