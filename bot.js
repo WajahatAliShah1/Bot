@@ -1,31 +1,29 @@
-import "dotenv/config";
-import {
+require("dotenv/config");
+const {
   Client,
   GatewayIntentBits,
   TextChannel,
   EmbedBuilder,
-} from "discord.js";
-import { OpenSeaStreamClient, Network } from "@opensea/stream-js";
-import { WebSocket } from "ws";
-import axios, { AxiosError } from "axios";
+} = require("discord.js");
+const { OpenSeaStreamClient, Network } = require("@opensea/stream-js");
+const { WebSocket } = require("ws");
+const axios = require("axios");
+const examplePayload = require("./example-payload.json");
+let newListingChannel, goodDealsChannel, salesChannel, belowFloorChannel;
 
 // Configuration Object
 const CONFIG = {
-  DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN!,
-  NEW_LISTINGS_CHANNEL_ID: process.env.NEW_LISTINGS_CHANNEL_ID!,
-  NINETYPLUS_DEAL_CHANNEL_ID: process.env.NINETYPLUS_DEAL_CHANNEL_ID!,
-  SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID!,
-  BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID!,
-  OPENSEA_API_KEY: process.env.OPENSEA_API_KEY!,
-  COLLECTION_SLUG: process.env.COLLECTION_SLUG!,
+  DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN,
+  NEW_LISTINGS_CHANNEL_ID: process.env.NEW_LISTINGS_CHANNEL_ID,
+  NINETYPLUS_DEAL_CHANNEL_ID: process.env.NINETYPLUS_DEAL_CHANNEL_ID,
+  SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID,
+  BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID,
+  OPENSEA_API_KEY: process.env.OPENSEA_API_KEY,
+  COLLECTION_SLUG: process.env.COLLECTION_SLUG,
 };
 
 // Retry Helper
-const retry = async (
-  fn: () => Promise<any>,
-  retries: number = 3,
-  delay: number = 2000
-): Promise<any> => {
+const retry = async (fn, retries = 3, delay = 2000) => {
   try {
     return await fn();
   } catch (error) {
@@ -38,9 +36,7 @@ const retry = async (
   }
 };
 
-const fetchCollectionFloorPrice = async (
-  collectionSlug: string
-): Promise<number | null> => {
+const fetchCollectionFloorPrice = async (collectionSlug) => {
   const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
   console.info("🔍 Fetching collection stats:", url);
 
@@ -52,7 +48,6 @@ const fetchCollectionFloorPrice = async (
       },
       timeout: 10000,
     });
-    // Adjusted to match the actual structure of the API response
     return response.data.total.floor_price || null;
   } catch (error) {
     console.error("❌ Error fetching collection stats:", error);
@@ -61,11 +56,7 @@ const fetchCollectionFloorPrice = async (
 };
 
 // Fetch Asset Details
-const fetchAssetDetails = async (
-  chain: string,
-  contractAddress: string,
-  tokenId: string
-) => {
+const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
   const url = `https://api.opensea.io/api/v2/chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`;
   logger.info("🔍 Fetching asset details:", url);
 
@@ -82,14 +73,7 @@ const fetchAssetDetails = async (
 };
 
 // Build Discord Embed Message
-export const buildEmbedMessage = async (
-  eventType: string,
-  payload: any
-): Promise<{
-  embed: EmbedBuilder;
-  isGoodNinety: boolean;
-  isBelowFloor: boolean;
-}> => {
+const buildEmbedMessage = async (eventType, payload) => {
   const {
     item = {},
     base_price = null,
@@ -111,9 +95,9 @@ export const buildEmbedMessage = async (
   ];
 
   const traits = await fetchAssetDetails("ethereum", contractAddress, tokenId);
-  const findBoost = (key: string): number =>
+  const findBoost = (key) =>
     traits.find(
-      (trait: any) => trait.trait_type?.toLowerCase() === key.toLowerCase()
+      (trait) => trait.trait_type?.toLowerCase() === key.toLowerCase()
     )?.value || 0;
 
   const shooting = findBoost("Shooting");
@@ -129,7 +113,7 @@ export const buildEmbedMessage = async (
     : "N/A";
 
   const floorPrice = await fetchCollectionFloorPrice(CONFIG.COLLECTION_SLUG);
-  const tolerance = 0.0001; // Small tolerance for floating-point comparisons
+  const tolerance = 0.0001;
   const isBelowFloor =
     eventType === "Item Listed" &&
     floorPrice !== null &&
@@ -179,33 +163,30 @@ export const buildEmbedMessage = async (
 };
 
 // Cache to Track Processed Listings (Per Unique NFT ID)
-const listingCache = new Map<string, { price: string; seller: string }>();
+const listingCache = new Map();
 
 // Helper to Generate Unique Key for Listings
-const generateKey = (nftId: string) => nftId;
+const generateKey = (nftId) => nftId;
 
 // OpenSea Stream Setup with Duplicate Detection
-const setupStreamClient = (
-  onEvent: (eventType: string, payload: any) => void
-) => {
+const setupStreamClient = (onEvent) => {
   const client = new OpenSeaStreamClient({
     network: Network.MAINNET,
     token: CONFIG.OPENSEA_API_KEY,
     connectOptions: { transport: WebSocket },
   });
 
-  const handleStreamEvent = async (eventType: string, payload: any) => {
+  const handleStreamEvent = async (eventType, payload) => {
     try {
       const nftId = payload?.item?.nft_id || "";
       const price = payload?.base_price || payload?.sale_price || "0";
       const seller = payload?.maker?.address || "unknown";
 
-      if (!nftId) return; // Skip if NFT ID is missing
+      if (!nftId) return;
 
-      const key = nftId; // Unique key per NFT ID
+      const key = nftId;
       const cachedEntry = listingCache.get(key);
 
-      // Check for duplicates: skip if price and seller are unchanged
       if (
         cachedEntry &&
         cachedEntry.price === price &&
@@ -217,11 +198,10 @@ const setupStreamClient = (
         return;
       }
 
-      // Update the cache with new price and seller
       listingCache.set(key, { price, seller });
       logger.info(`✅ Processing new listing for NFT ID: ${nftId}.`);
 
-      await onEvent(eventType, payload); // Proceed with event processing
+      await onEvent(eventType, payload);
     } catch (error) {
       logger.error(`Error handling ${eventType} event:`, error);
     }
@@ -240,12 +220,9 @@ const setupStreamClient = (
 
 // Logger Utility
 const logger = {
-  info: (message: string, ...args: any[]) =>
-    console.log(`ℹ️  ${message}`, ...args),
-  success: (message: string, ...args: any[]) =>
-    console.log(`✅ ${message}`, ...args),
-  error: (message: string, ...args: any[]) =>
-    console.error(`❌ ${message}`, ...args),
+  info: (message, ...args) => console.log(`ℹ️  ${message}`, ...args),
+  success: (message, ...args) => console.log(`✅ ${message}`, ...args),
+  error: (message, ...args) => console.error(`❌ ${message}`, ...args),
 };
 
 // Main Discord Bot Setup
@@ -257,27 +234,23 @@ const setupDiscordBot = async () => {
   await discordBot.login(CONFIG.DISCORD_BOT_TOKEN);
   logger.success("Discord bot logged in successfully.");
 
-  const newListingChannel = (await discordBot.channels.fetch(
+  newListingChannel = await discordBot.channels.fetch(
     CONFIG.NEW_LISTINGS_CHANNEL_ID
-  )) as TextChannel;
-  const goodDealsChannel = (await discordBot.channels.fetch(
+  );
+  goodDealsChannel = await discordBot.channels.fetch(
     CONFIG.NINETYPLUS_DEAL_CHANNEL_ID
-  )) as TextChannel;
-  const salesChannel = (await discordBot.channels.fetch(
-    CONFIG.SALES_CHANNEL_ID
-  )) as TextChannel;
-  const belowFloorChannel = (await discordBot.channels.fetch(
+  );
+  salesChannel = await discordBot.channels.fetch(CONFIG.SALES_CHANNEL_ID);
+  belowFloorChannel = await discordBot.channels.fetch(
     CONFIG.BELOW_FLOOR_LISTING_CHANNEL_ID
-  )) as TextChannel;
+  );
 
   logger.success("Channels fetched successfully.");
 
-  // Setup OpenSea Stream Event Handling
   setupStreamClient(async (eventType, payload) => {
     try {
       logger.info(`🔍 Recognized Event: "${eventType}"`);
 
-      // Building embed message
       logger.info(`🚧 Building embed message for "${eventType}"...`);
       const { embed, isGoodNinety, isBelowFloor } = await buildEmbedMessage(
         eventType,
@@ -285,12 +258,10 @@ const setupDiscordBot = async () => {
       );
       logger.success(`Created embed message for "${eventType}".`);
 
-      // Send messages based on event type
       if (eventType === "Item Listed") {
         await newListingChannel.send({ embeds: [embed] });
         logger.success(`Send embed message to New Listing Channel Channel.`);
 
-        // Log for good deal if applicable
         if (isGoodNinety) {
           logger.success(
             `Recognized as a Good Deal 90! Sending to Good Deals 90 Channel.`
@@ -316,5 +287,47 @@ const setupDiscordBot = async () => {
   logger.success("Discord bot is connected and ready to receive events!");
 };
 
-// Start the Bot
-setupDiscordBot().catch((error) => logger.error("Bot setup failed:", error));
+const simulateEvent = async (eventType, payload) => {
+  logger.info(`Simulating event: "${eventType}"`);
+
+  // Build the embed message
+  const { embed, isGoodNinety, isBelowFloor } = await buildEmbedMessage(
+    eventType,
+    payload
+  );
+
+  if (eventType === "Item Listed") {
+    await newListingChannel.send({ embeds: [embed] });
+    if (isGoodNinety) {
+      await goodDealsChannel.send({ embeds: [embed] });
+    }
+    if (isBelowFloor) {
+      await belowFloorChannel.send({ embeds: [embed] });
+    }
+  } else if (eventType === "Item Sold") {
+    await salesChannel.send({ embeds: [embed] });
+  }
+};
+
+if (process.env.NODE_ENV === "simulate") {
+  const simulate = async () => {
+    logger.info("Simulating Item Listed Event with Example Payload...");
+
+    try {
+      // Ensure channels are initialized
+      await setupDiscordBot();
+
+      // Simulate the event with the example payload
+      await simulateEvent("Item Listed", examplePayload.payload);
+    } catch (error) {
+      logger.error("Simulation failed with error:", error);
+    }
+  };
+
+  simulate();
+} else if (process.env.NODE_ENV !== "test") {
+  // Run the bot normally
+  setupDiscordBot().catch((error) => logger.error("Bot setup failed:", error));
+}
+
+module.exports = { buildEmbedMessage, CONFIG };

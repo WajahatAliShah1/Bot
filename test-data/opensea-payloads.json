@@ -1,0 +1,92 @@
+{
+  "item_listed": {
+    "event": "item_listed",
+    "sent_at": "2022-12-01T16:54:24.212517+00:00",
+    "payload": {
+      "event_type": "item_listed",
+      "payload": {
+        "base_price": "5000000000000000",
+        "collection": {
+          "slug": "boredfrens"
+        },
+        "event_timestamp": "2022-12-01T16:54:23.974726+00:00",
+        "expiration_date": "2022-12-02T16:54:22.000000+00:00",
+        "is_private": false,
+        "item": {
+          "chain": {
+            "name": "ethereum"
+          },
+          "metadata": {
+            "animation_url": null,
+            "image_url": "https://i.seadn.io/gae/6X_iRBPw33gDSZFlHxBBs6pSfQU8Z8c1ECpRV_Nru-fDvO6ORUky5GhpXeAtTR2ZNvkf8vElpW5-4NbdVOBOPr3aF1P_1Z-Mid6LLF8?w=500&auto=format",
+            "metadata_url": null,
+            "name": "Devil Frens #18682"
+          },
+          "nft_id": "ethereum/0x495f947276749ce646f68ac8c248420045cb7b5e/74630152366364009569833059154376861594951644105207272687495389092116791558145",
+          "permalink": "https://opensea.io/assets/ethereum/0x495f947276749ce646f68ac8c248420045cb7b5e/74630152366364009569833059154376861594951644105207272687495389092116791558145"
+        },
+        "listing_date": "2022-12-01T16:54:22.000000+00:00",
+        "maker": {
+          "address": "0xa4ff2b59d72f76ee51051196d25e3998cdc579c6"
+        },
+        "order_hash": "0xccbf2c8bc22d06fc16e118e5a865377d8b2fe4ea485cd0cb713899cca17d8964",
+        "payment_token": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "decimals": 18,
+          "eth_price": "1.000000000000000",
+          "name": "Ether",
+          "symbol": "ETH",
+          "usd_price": "1287.160000000000082000"
+        }
+      }
+    }
+  },
+  "item_sold": {
+    "event": "item_sold",
+    "sent_at": "2022-12-01T16:54:27.741979+00:00",
+    "payload": {
+      "event_type": "item_sold",
+      "payload": {
+        "closing_date": "2022-12-01T16:54:23.000000+00:00",
+        "collection": {
+          "slug": "sneakerheadsofficial"
+        },
+        "event_timestamp": "2022-12-01T16:54:23.000000+00:00",
+        "is_private": false,
+        "item": {
+          "chain": {
+            "name": "ethereum"
+          },
+          "metadata": {
+            "animation_url": null,
+            "image_url": "https://i.seadn.io/gae/7k408lJucpd0xYOlfvucW50zsXfa53YvdhsRZ_Y_mkmR1mUcNxPKoUphLbgHjLE7-qd5fvnYKBkyGxPsIyV2zQhLy2jjH4KVr8gqeg?w=500&auto=format",
+            "metadata_url": "https://api.sneakerheads.xyz/sneaker/3884",
+            "name": "SNEAKERHEADS #3884"
+          },
+          "nft_id": "ethereum/0x8dc7b6ec6fafa36085ee9ec8e39112428d3360aa/3884",
+          "permalink": "https://opensea.io/assets/ethereum/0x8dc7b6ec6fafa36085ee9ec8e39112428d3360aa/3884"
+        },
+        "maker": {
+          "address": "0x16ce6c6662510faf7c34bb1406fd8c20641db9e3"
+        },
+        "order_hash": "0x2fba6c445b08e38e013a96463b69242cfed5b41459a9635fed28eff3809ce9b8",
+        "payment_token": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "decimals": 18,
+          "eth_price": "1.000000000000000",
+          "name": "Ether",
+          "symbol": "ETH",
+          "usd_price": "1287.160000000000082000"
+        },
+        "sale_price": "150000000000000000",
+        "taker": {
+          "address": "0xa16f1cba10737adff9b7ed6f12bd3fcfe93c2d8e"
+        },
+        "transaction": {
+          "hash": "0x27b04793393f06f5529bed99bfb35f8af2487a478a7ace121ebc1f057c77c6b1",
+          "timestamp": "2022-12-01T16:54:23.000000+00:00"
+        }
+      }
+    }
+  }
+}
