@@ -8,14 +8,23 @@ const {
 const { OpenSeaStreamClient, Network } = require("@opensea/stream-js");
 const { WebSocket } = require("ws");
 const axios = require("axios");
-const examplePayload = require("./example-payload.json");
-let newListingChannel, goodDealsChannel, salesChannel, belowFloorChannel;
+const examplePayload = require("./example-sale-payload.json");
+let newListingChannel,
+  ninetyPlusChannel,
+  eightyPlusChannel,
+  seventyPlusChannel,
+  twoFortyOverallPlusChannel,
+  salesChannel,
+  belowFloorChannel;
 
 // Configuration Object
 const CONFIG = {
   DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN,
   NEW_LISTINGS_CHANNEL_ID: process.env.NEW_LISTINGS_CHANNEL_ID,
-  NINETYPLUS_DEAL_CHANNEL_ID: process.env.NINETYPLUS_DEAL_CHANNEL_ID,
+  NINETYPLUS_CHANNEL_ID: process.env.NINETYPLUS_CHANNEL_ID,
+  EIGHTYPLUS_CHANNEL_ID: process.env.EIGHTYPLUS_CHANNEL_ID,
+  SEVENTYPLUS_CHANNEL_ID: process.env.SEVENTYPLUS_CHANNEL_ID,
+  TWOFORTY_OVERALLPLUS_CHANNEL_ID: process.env.TWOFORTY_OVERALLPLUS_CHANNEL_ID,
   SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID,
   BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID,
   OPENSEA_API_KEY: process.env.OPENSEA_API_KEY,
@@ -72,6 +81,33 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
   });
 };
 
+const extractBestOffer = (payload) => {
+  // Extract base price (in wei)
+  const basePrice = BigInt(payload.base_price || "0");
+
+  // Extract consideration array
+  const consideration = payload.protocol_data?.parameters?.consideration || [];
+
+  // Find the best offer amount from consideration
+  const bestOfferWei = consideration
+    .filter(
+      (item) => item.token === "0x0000000000000000000000000000000000000000"
+    ) // ETH only
+    .reduce(
+      (max, item) =>
+        BigInt(item.startAmount || "0") > max
+          ? BigInt(item.startAmount || "0")
+          : max,
+      BigInt(0)
+    );
+
+  // Convert to ETH
+  const bestOfferETH = Number(bestOfferWei) / 1e18;
+
+  // Return the best offer
+  return bestOfferETH > 0 ? bestOfferETH : Number(basePrice) / 1e18;
+};
+
 // Build Discord Embed Message
 const buildEmbedMessage = async (eventType, payload) => {
   const {
@@ -106,6 +142,17 @@ const buildEmbedMessage = async (eventType, payload) => {
   const vision = findBoost("Vision");
   const overall = shooting + defense + finish + vision;
 
+  // Extract Best Offer
+  const bestOfferInETH = extractBestOffer(payload);
+  const bestOfferInUSD = payment_token?.usd_price
+    ? `$${(bestOfferInETH * payment_token.usd_price).toFixed(2)}`
+    : "N/A";
+
+  const bestOfferText =
+    bestOfferInETH > 0
+      ? `${bestOfferInETH.toFixed(4)} ETH (${bestOfferInUSD})`
+      : "No offers yet";
+
   const priceInETH =
     Number(eventType === "Item Sold" ? sale_price : base_price) / 1e18 || 0;
   const priceInUSD = payment_token?.usd_price
@@ -121,6 +168,17 @@ const buildEmbedMessage = async (eventType, payload) => {
   const isGoodNinety =
     priceInETH < 1 &&
     [shooting, defense, finish, vision].some((stat) => stat >= 90);
+  const isGoodEighty =
+    priceInETH < 1 &&
+    [shooting, defense, finish, vision].some((stat) => stat >= 80 && stat < 90);
+  const isGoodSeventy =
+    priceInETH < 1 &&
+    [shooting, defense, finish, vision].some((stat) => stat >= 70 && stat < 80);
+  const isGoodTwoFortyPlus = priceInETH < 1 && overall >= 240;
+
+  const floorPriceInUSD = payment_token?.usd_price
+    ? `$${(floorPrice * payment_token.usd_price).toFixed(2)}`
+    : "N/A";
 
   const embed = new EmbedBuilder()
     .setColor(eventType === "Item Sold" ? "#ff4500" : "#0099ff")
@@ -134,22 +192,69 @@ const buildEmbedMessage = async (eventType, payload) => {
         inline: true,
       },
       { name: "Price (USD)", value: priceInUSD, inline: true },
-      { name: "Overall", value: `${overall}`, inline: false },
+      { name: "\u000A", value: "\u000A" },
+      {
+        name: "Floor Price (ETH)",
+        value: floorPrice !== null ? `${floorPrice.toFixed(4)} ETH` : "N/A",
+        inline: true,
+      },
+      {
+        name: "Floor Price (USD)",
+        value: floorPriceInUSD,
+        inline: true,
+      },
+      { name: "\u000A", value: "\u000A" },
+      { name: "Best Offer", value: bestOfferText, inline: false },
+      { name: "\u000A", value: "\u000A" },
       { name: "Shooting", value: `${shooting}`, inline: true },
       { name: "Defense", value: `${defense}`, inline: true },
+      { name: "\u000A", value: "\u000A" },
       { name: "Finish", value: `${finish}`, inline: true },
       { name: "Vision", value: `${vision}`, inline: true },
-      {
-        name: "Floor Price",
-        value: floorPrice !== null ? `${floorPrice.toFixed(4)} ETH` : "N/A",
-        inline: false,
-      }
+      { name: "\u000A", value: "\u000A" },
+      { name: "Overall", value: `${overall}`, inline: false },
+      { name: "\u000A", value: "\u000A" }
     );
 
   if (eventType === "Item Sold") {
     embed.addFields(
-      { name: "From", value: maker.address || "N/A", inline: true },
-      { name: "To", value: taker?.address || "N/A", inline: true },
+      {
+        name: "From Wallet",
+        value: maker.address
+          ? `[${maker.address.slice(0, 6)}](https://opensea.io/${
+              maker.address
+            })`
+          : "N/A",
+        inline: true,
+      },
+      {
+        name: "To Wallet",
+        value: taker?.address
+          ? `[${taker.address.slice(0, 6)}](https://opensea.io/${
+              taker.address
+            })`
+          : "N/A",
+        inline: true,
+      },
+      { name: "\u000A", value: "\u000A" },
+      {
+        name: "From Etherscan",
+        value: maker.address
+          ? `[${maker.address.slice(0, 6)}](https://etherscan.io/address/${
+              maker.address
+            })`
+          : "N/A",
+        inline: true,
+      },
+      {
+        name: "To Etherscan",
+        value: taker?.address
+          ? `[${taker.address.slice(0, 6)}](https://etherscan.io/address/${
+              taker.address
+            })`
+          : "N/A",
+        inline: true,
+      },
       {
         name: "Transaction",
         value: transaction?.hash
@@ -157,9 +262,37 @@ const buildEmbedMessage = async (eventType, payload) => {
           : "N/A",
       }
     );
+  } else if (eventType === "Item Listed") {
+    embed.addFields(
+      {
+        name: "Lister Etherscan",
+        value: maker.address
+          ? `[${maker.address.slice(0, 6)}](https://etherscan.io/address/${
+              maker.address
+            })`
+          : "N/A",
+        inline: true,
+      },
+      {
+        name: "Lister Wallet",
+        value: maker.address
+          ? `[${maker.address.slice(0, 6)}](https://opensea.io/${
+              maker.address
+            })`
+          : "N/A",
+        inline: true,
+      }
+    );
   }
 
-  return { embed, isGoodNinety, isBelowFloor };
+  return {
+    embed,
+    isGoodNinety,
+    isBelowFloor,
+    isGoodEighty,
+    isGoodSeventy,
+    isGoodTwoFortyPlus,
+  };
 };
 
 // Cache to Track Processed Listings (Per Unique NFT ID)
@@ -213,7 +346,6 @@ const setupStreamClient = (onEvent) => {
   client.onItemSold(CONFIG.COLLECTION_SLUG, (event) =>
     handleStreamEvent("Item Sold", event.payload)
   );
-
   client.connect();
   logger.success("Connected to OpenSea Stream API.");
 };
@@ -237,8 +369,17 @@ const setupDiscordBot = async () => {
   newListingChannel = await discordBot.channels.fetch(
     CONFIG.NEW_LISTINGS_CHANNEL_ID
   );
-  goodDealsChannel = await discordBot.channels.fetch(
-    CONFIG.NINETYPLUS_DEAL_CHANNEL_ID
+  ninetyPlusChannel = await discordBot.channels.fetch(
+    CONFIG.NINETYPLUS_CHANNEL_ID
+  );
+  eightyPlusChannel = await discordBot.channels.fetch(
+    CONFIG.EIGHTYPLUS_CHANNEL_ID
+  );
+  seventyPlusChannel = await discordBot.channels.fetch(
+    CONFIG.SEVENTYPLUS_CHANNEL_ID
+  );
+  twoFortyOverallPlusChannel = await discordBot.channels.fetch(
+    CONFIG.TWOFORTY_OVERALLPLUS_CHANNEL_ID
   );
   salesChannel = await discordBot.channels.fetch(CONFIG.SALES_CHANNEL_ID);
   belowFloorChannel = await discordBot.channels.fetch(
@@ -252,10 +393,14 @@ const setupDiscordBot = async () => {
       logger.info(`🔍 Recognized Event: "${eventType}"`);
 
       logger.info(`🚧 Building embed message for "${eventType}"...`);
-      const { embed, isGoodNinety, isBelowFloor } = await buildEmbedMessage(
-        eventType,
-        payload
-      );
+      const {
+        embed,
+        isGoodNinety,
+        isBelowFloor,
+        isGoodEighty,
+        isGoodSeventy,
+        isGoodTwoFortyPlus,
+      } = await buildEmbedMessage(eventType, payload);
       logger.success(`Created embed message for "${eventType}".`);
 
       if (eventType === "Item Listed") {
@@ -266,16 +411,37 @@ const setupDiscordBot = async () => {
           logger.success(
             `Recognized as a Good Deal 90! Sending to Good Deals 90 Channel.`
           );
-          await goodDealsChannel.send({ embeds: [embed] });
+          await ninetyPlusChannel.send({ embeds: [embed] });
           logger.success(`Send embed message to Good Deal 90 Channel.`);
         }
-      }
-      if (isBelowFloor) {
-        logger.success(
-          `Listing is below floor price! Sending to Below Floor Listings Channel.`
-        );
-        await belowFloorChannel.send({ embeds: [embed] });
-        logger.success(`Sent embed message to Below Floor Listings Channel.`);
+        if (isGoodEighty) {
+          logger.success(
+            `Recognized as a Good Deal 80! Sending to Good Deals 80 Channel.`
+          );
+          await eightyPlusChannel.send({ embeds: [embed] });
+          logger.success(`Send embed message to Good Deal 80 Channel.`);
+        }
+        if (isGoodSeventy) {
+          logger.success(
+            `Recognized as a Good Deal 70! Sending to Good Deals 70 Channel.`
+          );
+          await seventyPlusChannel.send({ embeds: [embed] });
+          logger.success(`Send embed message to Good Deal 70 Channel.`);
+        }
+        if (isGoodTwoFortyPlus) {
+          logger.success(
+            `Recognized as a Good Deal 240 Plus! Sending to Good Deals 240 Plus Channel.`
+          );
+          await twoFortyOverallPlusChannel.send({ embeds: [embed] });
+          logger.success(`Send embed message to Good Deal 240 Plus Channel.`);
+        }
+        if (isBelowFloor) {
+          logger.success(
+            `Listing is below floor price! Sending to Below Floor Listings Channel.`
+          );
+          await belowFloorChannel.send({ embeds: [embed] });
+          logger.success(`Sent embed message to Below Floor Listings Channel.`);
+        }
       } else if (eventType === "Item Sold") {
         await salesChannel.send({ embeds: [embed] });
         logger.success(`Send embed message to Sales Channel.`);
@@ -291,15 +457,28 @@ const simulateEvent = async (eventType, payload) => {
   logger.info(`Simulating event: "${eventType}"`);
 
   // Build the embed message
-  const { embed, isGoodNinety, isBelowFloor } = await buildEmbedMessage(
-    eventType,
-    payload
-  );
+  const {
+    embed,
+    isGoodNinety,
+    isBelowFloor,
+    isGoodEighty,
+    isGoodSeventy,
+    isGoodTwoFortyPlus,
+  } = await buildEmbedMessage(eventType, payload);
 
   if (eventType === "Item Listed") {
     await newListingChannel.send({ embeds: [embed] });
     if (isGoodNinety) {
-      await goodDealsChannel.send({ embeds: [embed] });
+      await ninetyPlusChannel.send({ embeds: [embed] });
+    }
+    if (isGoodEighty) {
+      await eightyPlusChannel.send({ embeds: [embed] });
+    }
+    if (isGoodSeventy) {
+      await seventyPlusChannel.send({ embeds: [embed] });
+    }
+    if (isGoodTwoFortyPlus) {
+      await twoFortyOverallPlusChannel.send({ embeds: [embed] });
     }
     if (isBelowFloor) {
       await belowFloorChannel.send({ embeds: [embed] });
@@ -311,14 +490,31 @@ const simulateEvent = async (eventType, payload) => {
 
 if (process.env.NODE_ENV === "simulate") {
   const simulate = async () => {
-    logger.info("Simulating Item Listed Event with Example Payload...");
+    logger.info("Simulating OpenSea Event with Example Payload...");
 
     try {
       // Ensure channels are initialized
       await setupDiscordBot();
 
-      // Simulate the event with the example payload
-      await simulateEvent("Item Listed", examplePayload.payload);
+      // Extract the event type from the payload
+      const eventType = examplePayload.payload.event_type; // Correct path to event type
+
+      if (!eventType || !["item_sold", "item_listed"].includes(eventType)) {
+        throw new Error(
+          `Invalid or missing "event_type" field in the example payload: ${eventType}`
+        );
+      }
+
+      // Convert event_type to human-readable form (optional)
+      const eventTypeReadable =
+        eventType === "item_sold" ? "Item Sold" : "Item Listed";
+
+      logger.info(
+        `Simulating "${eventTypeReadable}" event with example payload...`
+      );
+
+      // Simulate the event with the extracted event type
+      await simulateEvent(eventTypeReadable, examplePayload.payload.payload);
     } catch (error) {
       logger.error("Simulation failed with error:", error);
     }
@@ -331,3 +527,4 @@ if (process.env.NODE_ENV === "simulate") {
 }
 
 module.exports = { buildEmbedMessage, CONFIG };
+

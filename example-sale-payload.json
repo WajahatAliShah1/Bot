@@ -1,0 +1,100 @@
+{
+  "event": "item_sold",
+  "sent_at": "2022-12-01T16:54:27.741979+00:00",
+  "payload": {
+    "event_type": "item_sold",
+    "payload": {
+      "closing_date": "2022-12-01T16:54:23.000000+00:00",
+      "collection": {
+        "slug": "rumble-kong-league"
+      },
+      "event_timestamp": "2022-12-01T16:54:23.000000+00:00",
+      "is_private": false,
+      "item": {
+        "chain": {
+          "name": "ethereum"
+        },
+        "metadata": {
+          "animation_url": null,
+          "image_url": "https://ipfs.io/ipfs/QmcD6xzaLD5yhVsvQNkX7mrf4P7hyqnvNAHrVNevjCg8R5",
+          "metadata_url": "https://ipfs.io/ipfs/QmaWwYXk4WwAX6kMRzbQfhrit2mkiw8FYixo2ChbEwwHnh/9296",
+          "name": "Kong #DISCORD TESTING"
+        },
+        "nft_id": "ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/9296",
+        "permalink": "https://opensea.io/assets/ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/9296"
+      },
+      "listing_type": null,
+      "maker": {
+        "address": "0xdb8ab7d21ce974f3bc55726a14dcdcdb4d5c19f3"
+      },
+      "order_hash": "0x6d6cd69d6af42e6e888990f82f6d1dbb74e9feee75a8f294c08f7be0ddf44b47",
+      "payment_token": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "decimals": 18,
+        "eth_price": "1.000000000000000",
+        "name": "Ether",
+        "symbol": "ETH",
+        "usd_price": "1287.160000000000082000"
+      },
+      "protocol_data": {
+        "parameters": {
+          "conduitKey": "0x0000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000",
+          "consideration": [
+            {
+              "endAmount": 138750000000000000,
+              "identifierOrCriteria": 0,
+              "itemType": 0,
+              "recipient": "0x16Ce6c6662510faF7C34bb1406fd8c20641db9E3",
+              "startAmount": 138750000000000000,
+              "token": "0x0000000000000000000000000000000000000000"
+            },
+            {
+              "endAmount": 3750000000000000,
+              "identifierOrCriteria": 0,
+              "itemType": 0,
+              "recipient": "0x0000a26b00c1F0DF003000390027140000fAa719",
+              "startAmount": 3750000000000000,
+              "token": "0x0000000000000000000000000000000000000000"
+            },
+            {
+              "endAmount": 7500000000000000,
+              "identifierOrCriteria": 0,
+              "itemType": 0,
+              "recipient": "0x025B188919DC10b42aE5bC85134300628F834E96",
+              "startAmount": 7500000000000000,
+              "token": "0x0000000000000000000000000000000000000000"
+            }
+          ],
+          "counter": 0,
+          "endTime": 1671471291,
+          "offer": [
+            {
+              "endAmount": 1,
+              "identifierOrCriteria": 3884,
+              "itemType": 2,
+              "startAmount": 1,
+              "token": "0x8dC7b6EC6FafA36085EE9ec8e39112428D3360aa"
+            }
+          ],
+          "offerer": "0x16Ce6c6662510faF7C34bb1406fd8c20641db9E3",
+          "orderType": 2,
+          "salt": 2.444686030276174e76,
+          "startTime": 1669555611,
+          "totalOriginalConsiderationItems": 3,
+          "zone": "0x004C00500000aD104D7DBd00e3ae0A5C00560C00",
+          "zoneHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "signature": "0x"
+      },
+      "quantity": 1,
+      "sale_price": "150000000000000000",
+      "taker": {
+        "address": "0x7ce9eca78350be208c514c140eda3021757775d7"
+      },
+      "transaction": {
+        "hash": "0x27b04793393f06f5529bed99bfb35f8af2487a478a7ace121ebc1f057c77c6b1",
+        "timestamp": "2022-12-01T16:54:23.000000+00:00"
+      }
+    }
+  }
+}

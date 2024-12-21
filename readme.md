@@ -72,7 +72,7 @@ This bot integrates with the OpenSea API to monitor NFT events such as listings 
 
 ### Simulate Events
 1. Set `NODE_ENV=simulate` in your `.env` file.
-2. Place a sample payload in the `example-payload.json` file (or use the provided example).
+2. Change the example-payload import at the top from example-sale-payload or example-listing-payload to test either one.
 3. Run the bot to simulate an event:
    ```bash
    node bot.js

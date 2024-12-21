@@ -1,0 +1,39 @@
+{
+    "asset_events": [
+      {
+        "event_type": "sale",
+        "order_hash": "0x6d6cd69d6af42e6e888990f82f6d1dbb74e9feee75a8f294c08f7be0ddf44b47",
+        "chain": "ethereum",
+        "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+        "closing_date": 1734735911,
+        "nft": {
+          "identifier": "9296",
+          "collection": "rumble-kong-league",
+          "contract": "0xef0182dc0574cd5874494a120750fd222fdb909a",
+          "token_standard": "erc721",
+          "name": "Kong #9296",
+          "description": "Rumble Kong League is a competitive 3 vs 3 basketball experience, combining play-to-earn functionality with NFT Collection mechanics, enabling users to compete in engaging ways through NFTs.",
+          "image_url": "https://ipfs.io/ipfs/QmcD6xzaLD5yhVsvQNkX7mrf4P7hyqnvNAHrVNevjCg8R5",
+          "display_image_url": "https://i.seadn.io/gae/yku1xNkds1bWePv8eVCGT_vkEiiwIIeJcLptJaNMsngBM8-SV0HYKE8Jscbuwna8b91nm2UN7ytiXYiOXoL7lhC3Rm0Gv04a87DG?w=500&auto=format",
+          "display_animation_url": null,
+          "metadata_url": "https://ipfs.io/ipfs/QmaWwYXk4WwAX6kMRzbQfhrit2mkiw8FYixo2ChbEwwHnh/9296",
+          "opensea_url": "https://opensea.io/assets/ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/9296",
+          "updated_at": "2024-12-20T23:05:14.068878",
+          "is_disabled": false,
+          "is_nsfw": false
+        },
+        "quantity": 1,
+        "seller": "0xdb8ab7d21ce974f3bc55726a14dcdcdb4d5c19f3",
+        "buyer": "0x7ce9eca78350be208c514c140eda3021757775d7",
+        "payment": {
+          "quantity": "300000000000000000",
+          "token_address": "0x0000000000000000000000000000000000000000",
+          "decimals": 18,
+          "symbol": "ETH"
+        },
+        "transaction": "0x08b71d90e4c82fce6e659773c397fea2f597f7e6ce3e90b23b62e06aea01569a",
+        "event_timestamp": 1734735911
+      }
+    ],
+    "next": "LWV2ZW50X3RpbWVzdGFtcD0yMDI0LTEyLTIwKzIzJTNBMDUlM0ExMSYtZXZlbnRfdHlwZT1zdWNjZXNzZnVsJi1waz0zMDEyMDIzOTkyMA=="
+  }

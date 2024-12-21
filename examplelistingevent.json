@@ -1,0 +1,42 @@
+{
+    "asset_events": [
+      {
+        "event_type": "order",
+        "order_hash": "0x96d6d6be9d6ac078f9c8f85f90046027c6da72888100cb52d26588bdb2558896",
+        "order_type": "listing",
+        "chain": "ethereum",
+        "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+        "start_date": 1734744328,
+        "expiration_date": 1734830725,
+        "asset": {
+          "identifier": "3820",
+          "collection": "rumble-kong-league",
+          "contract": "0xef0182dc0574cd5874494a120750fd222fdb909a",
+          "token_standard": "erc721",
+          "name": "Kong #3820",
+          "description": "Rumble Kong League is a competitive 3 vs 3 basketball experience, combining play-to-earn functionality with NFT Collection mechanics, enabling users to compete in engaging ways through NFTs.",
+          "image_url": "https://ipfs.io/ipfs/QmaVN6oTEUcumSwGy2bTBHZzRLA979jaibRKRgkcmtS2To",
+          "display_image_url": "https://i.seadn.io/gae/HhAxi3792xlyUXBfmP_0IHMWYcBh0dJSeR5z6-b968NHsr0xmB6UaiipyYyFSQAXEzZNtNtySIAxincPb5MGufd9dVR6a9SXGT02Vg?w=500&auto=format",
+          "display_animation_url": null,
+          "metadata_url": "https://ipfs.io/ipfs/QmaWwYXk4WwAX6kMRzbQfhrit2mkiw8FYixo2ChbEwwHnh/3820",
+          "opensea_url": "https://opensea.io/assets/ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/3820",
+          "updated_at": "2024-11-17T21:16:50.216826",
+          "is_disabled": false,
+          "is_nsfw": false
+        },
+        "quantity": 1,
+        "maker": "0xa1cdaf0dfe63a9aff2a7ebf25024e8b94c23d015",
+        "taker": "",
+        "payment": {
+          "quantity": "280000000000000000",
+          "token_address": "0x0000000000000000000000000000000000000000",
+          "decimals": 18,
+          "symbol": "ETH"
+        },
+        "criteria": {},
+        "event_timestamp": 1734744366,
+        "is_private_listing": false
+      }
+    ],
+    "next": "LWV2ZW50X3RpbWVzdGFtcD0yMDI0LTEyLTIxKzAxJTNBMjYlM0EwNi4xMDAyMDkmLWV2ZW50X3R5cGU9Y3JlYXRlZCYtcGs9MzAxMjQwNDQ5NTI="
+  }
