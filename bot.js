@@ -319,6 +319,21 @@ const setupStreamClient = (onEvent) => {
 
       const key = nftId;
       const cachedEntry = listingCache.get(key);
+      const priceChangeThreshold = 0.002; // Set your price change threshold
+
+      if (cachedEntry) {
+        const priceDifference = Math.abs(price - cachedEntry.price);
+
+        if (
+          cachedEntry.seller === seller &&
+          priceDifference < priceChangeThreshold
+        ) {
+          logger.info(
+            `🔄 Minor price change detected for NFT ID: ${nftId}. Skipping.`
+          );
+          return;
+        }
+      }
 
       if (
         cachedEntry &&
