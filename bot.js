@@ -312,41 +312,54 @@ const setupStreamClient = (onEvent) => {
   const handleStreamEvent = async (eventType, payload) => {
     try {
       const nftId = payload?.item?.nft_id || "";
-      const price = payload?.base_price || payload?.sale_price || "0";
+      const price = BigInt(payload?.base_price || payload?.sale_price || "0");
       const seller = payload?.maker?.address || "unknown";
 
       if (!nftId) return;
 
-      const key = nftId;
-      const cachedEntry = listingCache.get(key);
       const priceChangeThreshold = 0.002; // Set your price change threshold
 
-      if (cachedEntry) {
-        const priceDifference = Math.abs(price - cachedEntry.price);
-
-        if (
-          cachedEntry.seller === seller &&
-          priceDifference < priceChangeThreshold
-        ) {
-          logger.info(
-            `🔄 Minor price change detected for NFT ID: ${nftId}. Skipping.`
-          );
-          return;
-        }
+      // Initialize or retrieve the history for this NFT ID
+      if (!listingCache.has(nftId)) {
+        listingCache.set(nftId, []);
       }
+      const history = listingCache.get(nftId);
 
-      if (
-        cachedEntry &&
-        cachedEntry.price === price &&
-        cachedEntry.seller === seller
-      ) {
+      // Check for exact duplicates
+      const isDuplicate = history.some(
+        (entry) => entry.seller === seller && entry.price === price
+      );
+
+      if (isDuplicate) {
         logger.info(
           `🔄 Duplicate listing detected for NFT ID: ${nftId}. Skipping.`
         );
         return;
       }
 
-      listingCache.set(key, { price, seller });
+      // Check for minor price changes
+      const isMinorChange = history.some(
+        (entry) =>
+          entry.seller === seller &&
+          (price > entry.price ? price - entry.price : entry.price - price) <
+            priceChangeThreshold
+      );
+
+      if (isMinorChange) {
+        logger.info(
+          `🔄 Minor price change detected for NFT ID: ${nftId}. Skipping.`
+        );
+        return;
+      }
+
+      // Add the new listing to the history
+      history.push({ price, seller });
+
+      // Prune old entries to maintain a fixed history size
+      if (history.length > 5) {
+        history.shift(); // Remove the oldest entry
+      }
+
       logger.info(`✅ Processing new listing for NFT ID: ${nftId}.`);
 
       await onEvent(eventType, payload);
@@ -542,4 +555,3 @@ if (process.env.NODE_ENV === "simulate") {
 }
 
 module.exports = { buildEmbedMessage, CONFIG };
-
