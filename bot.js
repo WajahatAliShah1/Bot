@@ -31,6 +31,11 @@ const CONFIG = {
   COLLECTION_SLUG: process.env.COLLECTION_SLUG,
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+  CRYPTOCOMPARE_API_KEY: process.env.CRYPTOCOMPARE_API_KEY,
+  DEBUG_DISCORD: process.env.DEBUG_DISCORD,
+  DEBUG_PAYLOAD: process.env.DEBUG_PAYLOAD,
+  DEBUG_TELEGRAM: process.env.DEBUG_TELEGRAM,
+  NODE_ENV: process.env.NODE_ENV,
 };
 
 const TelegramBot = require("node-telegram-bot-api");
@@ -59,6 +64,114 @@ const retry = async (fn, retries = 3, delay = 2000) => {
   }
 };
 
+const fetchLastSaleDetails = async (chain, contractAddress, tokenId) => {
+  const url = `https://api.opensea.io/api/v2/events/chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`;
+  logger.info(
+    `🔍 Fetching last sale details for NFT: ${contractAddress}/${tokenId} on chain: ${chain}`
+  );
+
+  const params = {
+    event_type: "sale", // Filter only sale events
+    limit: 1, // Fetch the most recent sale event
+  };
+
+  // Helper function to calculate years and months ago
+  const calculateTimeAgo = (timestamp) => {
+    const transactionDate = new Date(timestamp * 1000);
+    const currentDate = new Date();
+
+    let years = currentDate.getFullYear() - transactionDate.getFullYear();
+    let months = currentDate.getMonth() - transactionDate.getMonth();
+
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+
+    return { years, months };
+  };
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Accept: "application/json",
+        "x-api-key": CONFIG.OPENSEA_API_KEY,
+      },
+      params,
+      timeout: 10000,
+    });
+
+    const events = response.data.asset_events || [];
+    if (events.length === 0) {
+      logger.info("No sales found for this NFT.");
+      return null;
+    }
+
+    // Parse the first event (most recent sale)
+    const lastSale = events[0];
+
+    // Extract ETH price (convert from wei) and timestamp
+    const ethPrice = Number(lastSale.payment.quantity) / 1e18; // Convert from wei to ETH
+    const timestamp = Number(lastSale.event_timestamp); // Ensure it's a number
+
+    // Calculate time ago
+    const { years, months } = calculateTimeAgo(timestamp);
+
+    // Dynamic formatting based on singular/plural
+    const yearText = years === 1 ? "year" : "years";
+    const monthText = months === 1 ? "month" : "months";
+
+    const yearsMonthsAgo = `${years} ${yearText} and ${months} ${monthText} ago`;
+
+    logger.info(
+      `✅ Last Sale: ${ethPrice} ETH on ${new Date(
+        timestamp * 1000
+      ).toLocaleDateString()} (${yearsMonthsAgo})`
+    );
+
+    return { ethPrice, timestamp, yearsMonthsAgo };
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      logger.info("No last sale details found for this NFT (404).");
+      return null;
+    }
+    logger.error("Error fetching last sale details:", error.message);
+    return null;
+  }
+};
+
+const fetchHistoricalEthPrice = async (date) => {
+  const url = `https://min-api.cryptocompare.com/data/pricehistorical`;
+  logger.info(`🔍 Fetching historical ETH price for date: ${date}`);
+
+  const params = {
+    fsym: "ETH", // Symbol for Ethereum
+    tsyms: "USD", // Target currency
+    ts: date, // Unix timestamp in seconds
+    api_key: CONFIG.CRYPTOCOMPARE_API_KEY,
+  };
+
+  try {
+    const response = await axios.get(url, { params, timeout: 10000 });
+    const usdPrice = response.data.ETH?.USD;
+
+    if (!usdPrice) {
+      logger.info("Historical USD price not found.");
+      return null;
+    }
+
+    logger.info(`✅ Historical ETH price: $${usdPrice}`);
+    return usdPrice;
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      logger.info(" No historical price found (404).");
+      return null;
+    }
+    logger.error("Error fetching historical ETH price:", error.message);
+    return null;
+  }
+};
+
 const fetchCollectionFloorPrice = async (collectionSlug) => {
   const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
   logger.info("🔍 Fetching collection stats:", url);
@@ -73,7 +186,7 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
     });
 
     if (!response.data || !response.data.total?.floor_price) {
-      logger.info("ℹ️ No floor price data found for this collection.");
+      logger.info("No floor price data found for this collection.");
       return null;
     }
 
@@ -86,10 +199,10 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
     return await retry(fetchFloorPrice, 3, 2000); // Retries 3 times with exponential backoff
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      logger.info("ℹ️ Collection floor price not found (404).");
+      logger.info("Collection floor price not found (404).");
       return null;
     }
-    logger.error("❌ Error fetching collection floor price:", error.message);
+    logger.error("Error fetching collection floor price:", error.message);
     return null;
   }
 };
@@ -108,7 +221,7 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
     });
 
     if (!response.data || !response.data.nft || !response.data.nft.traits) {
-      logger.info("ℹ️ No asset details or traits found for this NFT.");
+      logger.info("No asset details or traits found for this NFT.");
       return [];
     }
 
@@ -121,10 +234,10 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
     return await retry(fetchDetails, 3, 2000); // Retries 3 times with exponential backoff
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      logger.info("ℹ️ Asset details not found (404).");
+      logger.info("Asset details not found (404).");
       return [];
     }
-    logger.error("❌ Error fetching asset details:", error.message);
+    logger.error("Error fetching asset details:", error.message);
     return [];
   }
 };
@@ -146,7 +259,7 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
     const bestOffer = response.data || null;
 
     if (!bestOffer) {
-      logger.info("ℹ️ No best offer found for this NFT.");
+      logger.info("No best offer found for this NFT.");
       return null;
     }
 
@@ -159,7 +272,7 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
       logger.info(`✅ Best WETH Offer: ${bestOfferETH.toFixed(4)} ETH`);
       return bestOfferETH;
     } else {
-      logger.info("ℹ️ Best offer is not in WETH.");
+      logger.info("Best offer is not in WETH.");
       return null;
     }
   };
@@ -168,10 +281,10 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
     return await retry(fetchOffer, 3, 2000); // Retries 3 times with exponential backoff
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      logger.info("ℹ️ No best offer found for this NFT (404).");
+      logger.info("No best offer found for this NFT (404).");
       return null;
     }
-    logger.error("❌ Error fetching best offer:", error.message);
+    logger.error("Error fetching best offer:", error.message);
     return null;
   }
 };
@@ -188,6 +301,7 @@ const buildEmbedMessage = async (eventType, payload) => {
     transaction = {},
   } = payload || {};
 
+  const chain = "ethereum";
   const nftName = item?.metadata?.name || "Unnamed NFT";
   const imageUrl =
     item?.metadata?.image_url ||
@@ -197,6 +311,29 @@ const buildEmbedMessage = async (eventType, payload) => {
     "",
     "",
   ];
+
+  const { ethPrice, timestamp, yearsMonthsAgo } = await fetchLastSaleDetails(
+    chain,
+    contractAddress,
+    tokenId
+  );
+
+  let lastSaleUsd = "N/A";
+  let lastSaleDate = "N/A";
+  let lastSaleEth = "N/A";
+
+  if (ethPrice && timestamp) {
+    lastSaleEth = `${ethPrice.toFixed(4)} ETH`;
+    lastSaleDate = `${new Date(
+      timestamp * 1000
+    ).toLocaleDateString()} \n(${yearsMonthsAgo})`;
+
+    // Fetch historical ETH/USD price
+    const historicalUsdPrice = await fetchHistoricalEthPrice(timestamp);
+    if (historicalUsdPrice) {
+      lastSaleUsd = `$${(ethPrice * historicalUsdPrice).toFixed(2)}`;
+    }
+  }
 
   const traits = await fetchAssetDetails("ethereum", contractAddress, tokenId);
   const findBoost = (key) =>
@@ -259,17 +396,17 @@ const buildEmbedMessage = async (eventType, payload) => {
     .setColor(eventType === "Item Sold" ? "#ff4500" : "#0099ff")
     .setTitle(`${nftName} - ${eventType}`)
     .setURL(assetUrl)
-    .setThumbnail(imageUrl)
+    .setImage(imageUrl)
     .addFields(
       {
-        name: "Price (ETH)",
+        name: "Price",
         value: `${priceInETH.toFixed(4)} ETH`,
         inline: true,
       },
       { name: "Price (USD)", value: priceInUSD, inline: true },
       { name: "\u000A", value: "\u000A" },
       {
-        name: "Floor Price (ETH)",
+        name: "Floor Price",
         value: floorPrice !== null ? `${floorPrice.toFixed(4)} ETH` : "N/A",
         inline: true,
       },
@@ -280,18 +417,20 @@ const buildEmbedMessage = async (eventType, payload) => {
       },
       { name: "\u000A", value: "\u000A" },
       {
-        name: "Best WETH Offer At Time of Message",
+        name: "Best Current Offer",
         value: bestWethOfferText,
         inline: false,
       },
       { name: "\u000A", value: "\u000A" },
-      { name: "Shooting", value: `${shooting}`, inline: true },
-      { name: "Defense", value: `${defense}`, inline: true },
       { name: "\u000A", value: "\u000A" },
-      { name: "Finish", value: `${finish}`, inline: true },
-      { name: "Vision", value: `${vision}`, inline: true },
+      { name: "Shooting", value: `**${shooting}**`, inline: true },
+      { name: "Defense", value: `**${defense}**`, inline: true },
       { name: "\u000A", value: "\u000A" },
-      { name: "Overall", value: `${overall}`, inline: false },
+      { name: "Finish", value: `**${finish}**`, inline: true },
+      { name: "Vision", value: `**${vision}**`, inline: true },
+      { name: "\u000A", value: "\u000A" },
+      { name: "Overall", value: `**${overall}**`, inline: false },
+      { name: "\u000A", value: "\u000A" },
       { name: "\u000A", value: "\u000A" }
     );
 
@@ -343,6 +482,15 @@ const buildEmbedMessage = async (eventType, payload) => {
     );
   } else if (eventType === "Item Listed") {
     embed.addFields(
+      { name: "\u000A", value: "\u000A" },
+      { name: "Last Sale", value: lastSaleEth, inline: true },
+      { name: "Past USD", value: lastSaleUsd, inline: true },
+      {
+        name: "Date",
+        value: lastSaleDate,
+        inline: false,
+      },
+      { name: "\u000A", value: "\u000A" },
       {
         name: "Lister Etherscan",
         value: maker.address

@@ -4,7 +4,7 @@
   "payload": {
     "event_type": "item_listed",
     "payload": {
-      "base_price": "239890990000000000",
+      "base_price": "790000000000000000",
       "chain": "ethereum",
       "collection": {
         "slug": "rumble-kong-league"
@@ -18,9 +18,9 @@
         },
         "metadata": {
           "animation_url": null,
-          "image_url": "https://i.seadn.io/gae/0g-ekE5R50yBBvI6UBJxRhr85sVGcSl1esr1CkM18lpYORQj8r0ACp5X5-_Suw6zxibx0Or1Y5boIvLVZtt30kzrUaAPwlInsZqWwQk?w=500&auto=format",
+          "image_url": "https://i.seadn.io/gae/e9ERe-MfnLz0tCzxgCelK9zDnLdNjch1i1MaelS4CkdfJele_zApVasFhod0JM1LvY86UudBvCNARxbGzHusgb0evd8OBpOpfnyjSQ?w=500&auto=format",
           "metadata_url": "https://opensea.mypinata.cloud/ipfs/QmaWwYXk4WwAX6kMRzbQfhrit2mkiw8FYixo2ChbEwwHnh/9869",
-          "name": "TESTING KONG"
+          "name": "TESTING KONG 9896"
         },
         "nft_id": "ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/9869",
         "permalink": "https://opensea.io/assets/ethereum/0xef0182dc0574cd5874494a120750fd222fdb909a/9869"
@@ -28,7 +28,7 @@
       "listing_date": "2024-12-22T10:10:24.000000+00:00",
       "listing_type": null,
       "maker": {
-        "address": "0xd4f98052f6eeee63ba19d0438611c1577ccab3ba"
+        "address": "0x6eD14Bd05fCFEC53593B7b2AfA8B8A962B4f083F"
       },
       "order_hash": "0x5fb9188a144a272018bf2a6f4930a7deb71be7b47491040d48d4dcbcd09bb352",
       "payment_token": {
@@ -37,7 +37,7 @@
         "eth_price": "1.000000000000000",
         "name": "Ether",
         "symbol": "ETH",
-        "usd_price": "3382.119999999999891000"
+        "usd_price": "3313.600000"
       },
       "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
       "protocol_data": {
