@@ -5,10 +5,11 @@ const {
   TextChannel,
   EmbedBuilder,
 } = require("discord.js");
+const { sendSMSViaEmail } = require("./sms");
 const { OpenSeaStreamClient, Network } = require("@opensea/stream-js");
 const { WebSocket } = require("ws");
 const axios = require("axios");
-const examplePayload = require("./example-sale-payload.json");
+const examplePayload = require("./example-listing-payload.json");
 let newListingChannel,
   ninetyPlusChannel,
   eightyPlusChannel,
@@ -459,6 +460,21 @@ const setupDiscordBot = async () => {
           logger.success(
             `Recognized as a Good Deal 90! Sending to Good Deals 90 Channel.`
           );
+          // Send SMS for 90+ Boost
+          const nftName = payload.item?.metadata?.name || "Unnamed NFT";
+          const price = Number(payload.base_price || 0) / 1e18;
+          const link = payload.item?.permalink || "https://opensea.io";
+          const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
+            4
+          )} ETH. Check it out here: ${link}\n`;
+
+          await sendSMSViaEmail(
+            process.env.RECIPIENT_PHONE_NUMBER, // Phone number from .env
+            "txt.att.net", // Carrier gateway (e.g., AT&T)
+            message
+          );
+          logger.success(`📱 SMS sent for 90+ Boost: ${message}`);
+
           await ninetyPlusChannel.send({ embeds: [embed] });
           logger.success(`Send embed message to Good Deal 90 Channel.`);
         }
@@ -515,24 +531,38 @@ const simulateEvent = async (eventType, payload) => {
   } = await buildEmbedMessage(eventType, payload);
 
   if (eventType === "Item Listed") {
-    await newListingChannel.send({ embeds: [embed] });
+    // await newListingChannel.send({ embeds: [embed] });
     if (isGoodNinety) {
-      await ninetyPlusChannel.send({ embeds: [embed] });
+      // Send SMS for 90+ Boost
+      const nftName = payload.item?.metadata?.name || "Unnamed NFT";
+      const price = Number(payload.base_price || 0) / 1e18;
+      const link = payload.item?.permalink || "https://opensea.io";
+      const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
+        4
+      )} ETH. Check it out here: ${link}`;
+
+      await sendSMSViaEmail(
+        process.env.RECIPIENT_PHONE_NUMBER, // Phone number from .env
+        "txt.att.net", // Carrier gateway (e.g., AT&T)
+        message
+      );
+      logger.success(`📱 SMS sent for 90+ Boost: ${message}`);
+      // await ninetyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodEighty) {
-      await eightyPlusChannel.send({ embeds: [embed] });
+      // await eightyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodSeventy) {
-      await seventyPlusChannel.send({ embeds: [embed] });
+      // await seventyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodTwoFortyPlus) {
-      await twoFortyOverallPlusChannel.send({ embeds: [embed] });
+      // await twoFortyOverallPlusChannel.send({ embeds: [embed] });
     }
     if (isBelowFloor) {
-      await belowFloorChannel.send({ embeds: [embed] });
+      // await belowFloorChannel.send({ embeds: [embed] });
     }
   } else if (eventType === "Item Sold") {
-    await salesChannel.send({ embeds: [embed] });
+    // await salesChannel.send({ embeds: [embed] });
   }
 };
 
@@ -563,8 +593,16 @@ if (process.env.NODE_ENV === "simulate") {
 
       // Simulate the event with the extracted event type
       await simulateEvent(eventTypeReadable, examplePayload.payload.payload);
+
+      logger.info("Simulation completed successfully. Exiting...");
+
+      // Exit the process after simulation is complete
+      process.exit(0);
     } catch (error) {
       logger.error("Simulation failed with error:", error);
+
+      // Exit the process with an error code
+      process.exit(1);
     }
   };
 
