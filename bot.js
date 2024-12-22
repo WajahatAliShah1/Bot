@@ -85,6 +85,8 @@ const extractBestOffer = (payload) => {
   // Extract the consideration array
   const consideration = payload.protocol_data?.parameters?.consideration || [];
 
+  console.log("Consideration array:", JSON.stringify(consideration, null, 2));
+
   // Define ETH token address for mainnet
   const ETH_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
 
