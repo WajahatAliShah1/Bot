@@ -81,31 +81,52 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
   });
 };
 
-const extractBestOffer = (payload) => {
-  // Extract the consideration array
-  const consideration = payload.protocol_data?.parameters?.consideration || [];
+const fetchBestOffer = async (contractAddress, tokenId) => {
+  const url = `https://api.opensea.io/api/v1/asset/${contractAddress}/${tokenId}/offers`;
+  logger.info("🔍 Fetching best offer for asset:", url);
 
-  // Define ETH token address for mainnet
-  const ETH_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Accept: "application/json",
+        "x-api-key": CONFIG.OPENSEA_API_KEY,
+      },
+      timeout: 10000,
+    });
 
-  // Find the highest ETH offer from the consideration array
-  const highestOfferWei = consideration
-    .filter(
-      (item) => item.token?.toLowerCase() === ETH_TOKEN_ADDRESS.toLowerCase()
-    ) // Filter ETH-only entries
-    .reduce(
-      (max, item) =>
-        BigInt(item.startAmount || "0") > max
-          ? BigInt(item.startAmount || "0")
-          : max,
-      BigInt(0)
+    const offers = response.data.offers || [];
+    if (offers.length === 0) {
+      logger.info("ℹ️ No offers found for this asset.");
+      return null;
+    }
+
+    // Filter for WETH offers
+    const wethOffers = offers.filter(
+      (offer) =>
+        offer.payment_token?.address?.toLowerCase() ===
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase()
     );
 
-  // Convert the highest offer from Wei to ETH
-  const highestOfferETH = Number(highestOfferWei) / 1e18;
+    if (wethOffers.length === 0) {
+      logger.info("ℹ️ No WETH offers found for this asset.");
+      return null;
+    }
 
-  return highestOfferETH > 0 ? highestOfferETH : null; // Return null if no valid ETH offer
+    // Find the highest WETH offer
+    const bestOffer = wethOffers.reduce((max, offer) => {
+      const currentPrice = BigInt(offer.current_price || "0");
+      return currentPrice > max ? currentPrice : max;
+    }, BigInt(0));
+
+    const bestOfferETH = Number(bestOffer) / 1e18;
+    logger.info(`✅ Best WETH Offer: ${bestOfferETH} ETH`);
+    return bestOfferETH;
+  } catch (error) {
+    logger.error("Error fetching best offer:", error.message);
+    return null;
+  }
 };
+
 
 // Build Discord Embed Message
 const buildEmbedMessage = async (eventType, payload) => {
@@ -141,16 +162,12 @@ const buildEmbedMessage = async (eventType, payload) => {
   const vision = findBoost("Vision");
   const overall = shooting + defense + finish + vision;
 
-  // Extract Best Offer
-  const bestOfferInETH = extractBestOffer(payload);
-  const bestOfferInUSD = payment_token?.usd_price
-    ? `$${(bestOfferInETH * payment_token.usd_price).toFixed(2)}`
-    : "N/A";
-
-  const bestOfferText =
-    bestOfferInETH > 0
-      ? `${bestOfferInETH.toFixed(4)} ETH (${bestOfferInUSD})`
-      : "No offers yet";
+  // Fetch Best WETH Offer
+  const bestWethOffer = await fetchBestOffer(contractAddress, tokenId);
+  const bestWethOfferText =
+    bestWethOffer !== null
+      ? `${bestWethOffer.toFixed(4)} ETH`
+      : "No WETH offers yet";
 
   const priceInETH =
     Number(eventType === "Item Sold" ? sale_price : base_price) / 1e18 || 0;
@@ -203,7 +220,7 @@ const buildEmbedMessage = async (eventType, payload) => {
         inline: true,
       },
       { name: "\u000A", value: "\u000A" },
-      { name: "Best Offer", value: bestOfferText, inline: false },
+      { name: "Best WETH Offer", value: bestWethOfferText, inline: false },
       { name: "\u000A", value: "\u000A" },
       { name: "Shooting", value: `${shooting}`, inline: true },
       { name: "Defense", value: `${defense}`, inline: true },
