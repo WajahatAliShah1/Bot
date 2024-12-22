@@ -5,7 +5,6 @@ const {
   TextChannel,
   EmbedBuilder,
 } = require("discord.js");
-const { sendSMSViaEmail } = require("./sms");
 const { OpenSeaStreamClient, Network } = require("@opensea/stream-js");
 const { WebSocket } = require("ws");
 const axios = require("axios");
@@ -30,6 +29,20 @@ const CONFIG = {
   BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID,
   OPENSEA_API_KEY: process.env.OPENSEA_API_KEY,
   COLLECTION_SLUG: process.env.COLLECTION_SLUG,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+};
+
+const TelegramBot = require("node-telegram-bot-api");
+
+// Initialize Telegram bot
+const telegramBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+
+// Send a Telegram notification
+const sendTelegramNotification = async (chatId, message) => {
+  try {
+    await telegramBot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {}
 };
 
 // Retry Helper
@@ -50,7 +63,7 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
   const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
   console.info("🔍 Fetching collection stats:", url);
 
-  try {
+  return retry(async () => {
     const response = await axios.get(url, {
       headers: {
         Accept: "application/json",
@@ -58,11 +71,8 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
       },
       timeout: 10000,
     });
-    return response.data.total.floor_price || null;
-  } catch (error) {
-    console.error("❌ Error fetching collection stats:", error);
-    return null;
-  }
+    return response.data.total?.floor_price || null;
+  });
 };
 
 // Fetch Asset Details
@@ -86,7 +96,7 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
   const url = `https://api.opensea.io/api/v2/offers/collection/${collectionSlug}/nfts/${tokenId}/best`;
   logger.info(`🔍 Fetching best offer for NFT: ${url}`);
 
-  try {
+  const fetchOffer = async () => {
     const response = await axios.get(url, {
       headers: {
         Accept: "application/json",
@@ -115,6 +125,10 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
       logger.info("ℹ️ Best offer is not in WETH.");
       return null;
     }
+  };
+
+  try {
+    return await retry(fetchOffer, 3, 2000); // Retries 3 times with exponential backoff
   } catch (error) {
     if (error.response && error.response.status === 404) {
       logger.info("ℹ️ No best offer found for this NFT (404).");
@@ -188,6 +202,17 @@ const buildEmbedMessage = async (eventType, payload) => {
     priceInETH < 1 &&
     [shooting, defense, finish, vision].some((stat) => stat >= 70 && stat < 80);
   const isGoodTwoFortyPlus = priceInETH < 1 && overall >= 240;
+
+  // const is90Shooting = priceInETH < 1 && shooting >= 90;
+  // const is90Vision = priceInETH < 1 && vision >= 90;
+  // const is90Defense = priceInETH < 1 && defense >= 90;
+
+  // const is80Shooting = priceInETH < 1 && shooting >= 80;
+  // const is80Vision = priceInETH < 1 && vision >= 80;
+  // const is70Shooting = priceInETH < 1 && shooting >= 70;
+  // const is70Vision = priceInETH < 1 && vision >= 70;
+
+  // const is60VisionAnd80Shooting = priceInETH < 1 && vision >= 60 && shooting >= 80;
 
   const floorPriceInUSD = payment_token?.usd_price
     ? `$${(floorPrice * payment_token.usd_price).toFixed(2)}`
@@ -324,11 +349,14 @@ const setupStreamClient = (onEvent) => {
 
   const handleStreamEvent = async (eventType, payload) => {
     try {
-      // Log the payload with clear separation
-      console.log("\n====================");
-      console.log(`🔍 Event Type: ${eventType}`);
-      console.log("Full Payload:", JSON.stringify(payload, null, 2));
-      console.log("====================\n");
+      const isDebug = process.env.DEBUG === "true";
+      if (isDebug) {
+        // Log the payload with clear separation
+        console.log("\n====================");
+        console.log(`🔍 Event Type: ${eventType}`);
+        console.log("Full Payload:", JSON.stringify(payload, null, 2));
+        console.log("====================\n");
+      }
 
       const nftId = payload?.item?.nft_id || "";
       const price = BigInt(payload?.base_price || payload?.sale_price || "0");
@@ -466,14 +494,7 @@ const setupDiscordBot = async () => {
           const link = payload.item?.permalink || "https://opensea.io";
           const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
             4
-          )} ETH. Check it out here: ${link}\n`;
-
-          await sendSMSViaEmail(
-            process.env.RECIPIENT_PHONE_NUMBER, // Phone number from .env
-            "txt.att.net", // Carrier gateway (e.g., AT&T)
-            message
-          );
-          logger.success(`📱 SMS sent for 90+ Boost: ${message}`);
+          )} ETH. [Check it out here](${link})\n`;
 
           await ninetyPlusChannel.send({ embeds: [embed] });
           logger.success(`Send embed message to Good Deal 90 Channel.`);
@@ -539,30 +560,28 @@ const simulateEvent = async (eventType, payload) => {
       const link = payload.item?.permalink || "https://opensea.io";
       const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
         4
-      )} ETH. Check it out here: ${link}`;
+      )} ETH. [Check it out here](${link})\n`;
 
-      await sendSMSViaEmail(
-        process.env.RECIPIENT_PHONE_NUMBER, // Phone number from .env
-        "txt.att.net", // Carrier gateway (e.g., AT&T)
-        message
-      );
-      logger.success(`📱 SMS sent for 90+ Boost: ${message}`);
-      // await ninetyPlusChannel.send({ embeds: [embed] });
+      // Send Telegram notification
+      const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
+      await sendTelegramNotification(telegramChatId, message);
+      logger.success(`📱 Telegram notification sent: ${message}`);
+      await ninetyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodEighty) {
-      // await eightyPlusChannel.send({ embeds: [embed] });
+      await eightyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodSeventy) {
-      // await seventyPlusChannel.send({ embeds: [embed] });
+      await seventyPlusChannel.send({ embeds: [embed] });
     }
     if (isGoodTwoFortyPlus) {
-      // await twoFortyOverallPlusChannel.send({ embeds: [embed] });
+      await twoFortyOverallPlusChannel.send({ embeds: [embed] });
     }
     if (isBelowFloor) {
-      // await belowFloorChannel.send({ embeds: [embed] });
+      await belowFloorChannel.send({ embeds: [embed] });
     }
   } else if (eventType === "Item Sold") {
-    // await salesChannel.send({ embeds: [embed] });
+    await salesChannel.send({ embeds: [embed] });
   }
 };
 
