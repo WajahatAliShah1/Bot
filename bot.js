@@ -61,9 +61,9 @@ const retry = async (fn, retries = 3, delay = 2000) => {
 
 const fetchCollectionFloorPrice = async (collectionSlug) => {
   const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
-  console.info("🔍 Fetching collection stats:", url);
+  logger.info("🔍 Fetching collection stats:", url);
 
-  return retry(async () => {
+  const fetchFloorPrice = async () => {
     const response = await axios.get(url, {
       headers: {
         Accept: "application/json",
@@ -71,16 +71,34 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
       },
       timeout: 10000,
     });
-    return response.data.total?.floor_price || null;
-  });
+
+    if (!response.data || !response.data.total?.floor_price) {
+      logger.info("ℹ️ No floor price data found for this collection.");
+      return null;
+    }
+
+    const floorPrice = response.data.total.floor_price;
+    logger.info(`✅ Floor Price: ${floorPrice.toFixed(4)} ETH`);
+    return floorPrice;
+  };
+
+  try {
+    return await retry(fetchFloorPrice, 3, 2000); // Retries 3 times with exponential backoff
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      logger.info("ℹ️ Collection floor price not found (404).");
+      return null;
+    }
+    logger.error("❌ Error fetching collection floor price:", error.message);
+    return null;
+  }
 };
 
-// Fetch Asset Details
 const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
   const url = `https://api.opensea.io/api/v2/chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`;
   logger.info("🔍 Fetching asset details:", url);
 
-  return retry(async () => {
+  const fetchDetails = async () => {
     const response = await axios.get(url, {
       headers: {
         Accept: "application/json",
@@ -88,8 +106,27 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
       },
       timeout: 10000,
     });
-    return response.data.nft.traits || [];
-  });
+
+    if (!response.data || !response.data.nft || !response.data.nft.traits) {
+      logger.info("ℹ️ No asset details or traits found for this NFT.");
+      return [];
+    }
+
+    const traits = response.data.nft.traits;
+    logger.info(`✅ Asset Traits Fetched: ${traits.length} traits found.`);
+    return traits;
+  };
+
+  try {
+    return await retry(fetchDetails, 3, 2000); // Retries 3 times with exponential backoff
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      logger.info("ℹ️ Asset details not found (404).");
+      return [];
+    }
+    logger.error("❌ Error fetching asset details:", error.message);
+    return [];
+  }
 };
 
 const fetchBestOffer = async (collectionSlug, tokenId) => {
