@@ -85,8 +85,6 @@ const extractBestOffer = (payload) => {
   // Extract the consideration array
   const consideration = payload.protocol_data?.parameters?.consideration || [];
 
-  console.log("Consideration array:", JSON.stringify(consideration, null, 2));
-
   // Define ETH token address for mainnet
   const ETH_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -312,6 +310,12 @@ const setupStreamClient = (onEvent) => {
 
   const handleStreamEvent = async (eventType, payload) => {
     try {
+      // Log the payload with clear separation
+      console.log("\n====================");
+      console.log(`🔍 Event Type: ${eventType}`);
+      console.log("Full Payload:", JSON.stringify(payload, null, 2));
+      console.log("====================\n");
+
       const nftId = payload?.item?.nft_id || "";
       const price = BigInt(payload?.base_price || payload?.sale_price || "0");
       const seller = payload?.maker?.address || "unknown";
