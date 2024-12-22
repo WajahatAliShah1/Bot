@@ -81,9 +81,9 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
   });
 };
 
-const fetchBestOffer = async (contractAddress, tokenId) => {
-  const url = `https://api.opensea.io/api/v1/asset/${contractAddress}/${tokenId}/offers`;
-  logger.info("🔍 Fetching best offer for asset:", url);
+const fetchBestOffer = async (collectionSlug, tokenId) => {
+  const url = `https://api.opensea.io/api/v2/offers/collection/${collectionSlug}/nfts/${tokenId}/best`;
+  logger.info(`🔍 Fetching best offer for NFT: ${url}`);
 
   try {
     const response = await axios.get(url, {
@@ -94,39 +94,35 @@ const fetchBestOffer = async (contractAddress, tokenId) => {
       timeout: 10000,
     });
 
-    const offers = response.data.offers || [];
-    if (offers.length === 0) {
-      logger.info("ℹ️ No offers found for this asset.");
+    // Extract best offer data from the response
+    const bestOffer = response.data || null;
+
+    if (!bestOffer) {
+      logger.info("ℹ️ No best offer found for this NFT.");
       return null;
     }
 
-    // Filter for WETH offers
-    const wethOffers = offers.filter(
-      (offer) =>
-        offer.payment_token?.address?.toLowerCase() ===
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase()
-    );
-
-    if (wethOffers.length === 0) {
-      logger.info("ℹ️ No WETH offers found for this asset.");
+    // Ensure the offer is in WETH
+    if (
+      bestOffer.price?.currency?.toUpperCase() === "WETH" &&
+      bestOffer.price?.value
+    ) {
+      const bestOfferETH = Number(bestOffer.price.value) / 1e18;
+      logger.info(`✅ Best WETH Offer: ${bestOfferETH.toFixed(4)} ETH`);
+      return bestOfferETH;
+    } else {
+      logger.info("ℹ️ Best offer is not in WETH.");
       return null;
     }
-
-    // Find the highest WETH offer
-    const bestOffer = wethOffers.reduce((max, offer) => {
-      const currentPrice = BigInt(offer.current_price || "0");
-      return currentPrice > max ? currentPrice : max;
-    }, BigInt(0));
-
-    const bestOfferETH = Number(bestOffer) / 1e18;
-    logger.info(`✅ Best WETH Offer: ${bestOfferETH} ETH`);
-    return bestOfferETH;
   } catch (error) {
-    logger.error("Error fetching best offer:", error.message);
+    if (error.response && error.response.status === 404) {
+      logger.info("ℹ️ No best offer found for this NFT (404).");
+      return null;
+    }
+    logger.error("❌ Error fetching best offer:", error.message);
     return null;
   }
 };
-
 
 // Build Discord Embed Message
 const buildEmbedMessage = async (eventType, payload) => {
@@ -163,11 +159,11 @@ const buildEmbedMessage = async (eventType, payload) => {
   const overall = shooting + defense + finish + vision;
 
   // Fetch Best WETH Offer
-  const bestWethOffer = await fetchBestOffer(contractAddress, tokenId);
+  const bestWethOffer = await fetchBestOffer(CONFIG.COLLECTION_SLUG, tokenId);
   const bestWethOfferText =
     bestWethOffer !== null
       ? `${bestWethOffer.toFixed(4)} ETH`
-      : "No WETH offers yet";
+      : "No WETH offers found";
 
   const priceInETH =
     Number(eventType === "Item Sold" ? sale_price : base_price) / 1e18 || 0;
