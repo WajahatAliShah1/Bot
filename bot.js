@@ -82,17 +82,17 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
 };
 
 const extractBestOffer = (payload) => {
-  // Extract base price (in wei)
-  const basePrice = BigInt(payload.base_price || "0");
-
-  // Extract consideration array
+  // Extract the consideration array
   const consideration = payload.protocol_data?.parameters?.consideration || [];
 
-  // Find the best offer amount from consideration
-  const bestOfferWei = consideration
+  // Define ETH token address for mainnet
+  const ETH_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+  // Find the highest ETH offer from the consideration array
+  const highestOfferWei = consideration
     .filter(
-      (item) => item.token === "0x0000000000000000000000000000000000000000"
-    ) // ETH only
+      (item) => item.token?.toLowerCase() === ETH_TOKEN_ADDRESS.toLowerCase()
+    ) // Filter ETH-only entries
     .reduce(
       (max, item) =>
         BigInt(item.startAmount || "0") > max
@@ -101,11 +101,10 @@ const extractBestOffer = (payload) => {
       BigInt(0)
     );
 
-  // Convert to ETH
-  const bestOfferETH = Number(bestOfferWei) / 1e18;
+  // Convert the highest offer from Wei to ETH
+  const highestOfferETH = Number(highestOfferWei) / 1e18;
 
-  // Return the best offer
-  return bestOfferETH > 0 ? bestOfferETH : Number(basePrice) / 1e18;
+  return highestOfferETH > 0 ? highestOfferETH : null; // Return null if no valid ETH offer
 };
 
 // Build Discord Embed Message
@@ -317,7 +316,7 @@ const setupStreamClient = (onEvent) => {
 
       if (!nftId) return;
 
-      const priceChangeThreshold = 0.002; // Set your price change threshold
+      const priceChangeThreshold = BigInt(20000000000000000); // 0.02 ETH in wei
 
       // Initialize or retrieve the history for this NFT ID
       if (!listingCache.has(nftId)) {
@@ -337,13 +336,15 @@ const setupStreamClient = (onEvent) => {
         return;
       }
 
-      // Check for minor price changes
-      const isMinorChange = history.some(
-        (entry) =>
-          entry.seller === seller &&
-          (price > entry.price ? price - entry.price : entry.price - price) <
-            priceChangeThreshold
-      );
+      // Check for minor price changes using absolute threshold in ETH
+      const isMinorChange = history.some((entry) => {
+        if (entry.seller === seller) {
+          const priceDifference =
+            price > entry.price ? price - entry.price : entry.price - price;
+          return priceDifference < priceChangeThreshold;
+        }
+        return false;
+      });
 
       if (isMinorChange) {
         logger.info(
