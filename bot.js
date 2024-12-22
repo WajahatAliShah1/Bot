@@ -242,7 +242,11 @@ const buildEmbedMessage = async (eventType, payload) => {
         inline: true,
       },
       { name: "\u000A", value: "\u000A" },
-      { name: "Best WETH Offer", value: bestWethOfferText, inline: false },
+      {
+        name: "Best WETH Offer At Time of Message",
+        value: bestWethOfferText,
+        inline: false,
+      },
       { name: "\u000A", value: "\u000A" },
       { name: "Shooting", value: `${shooting}`, inline: true },
       { name: "Defense", value: `${defense}`, inline: true },
@@ -349,8 +353,8 @@ const setupStreamClient = (onEvent) => {
 
   const handleStreamEvent = async (eventType, payload) => {
     try {
-      const isDebug = process.env.DEBUG === "true";
-      if (isDebug) {
+      const debugPayload = process.env.DEBUG_PAYLOAD === "true";
+      if (debugPayload) {
         // Log the payload with clear separation
         console.log("\n====================");
         console.log(`🔍 Event Type: ${eventType}`);
@@ -482,43 +486,51 @@ const setupDiscordBot = async () => {
 
       if (eventType === "Item Listed") {
         await newListingChannel.send({ embeds: [embed] });
-        logger.success(`Send embed message to New Listing Channel Channel.`);
+        logger.success(`Sent embed message to New Listing Channel Channel.`);
 
         if (isGoodNinety) {
           logger.success(
             `Recognized as a Good Deal 90! Sending to Good Deals 90 Channel.`
           );
-          // Send SMS for 90+ Boost
+          // Send Telegram Msg for 90+ Boost
           const nftName = payload.item?.metadata?.name || "Unnamed NFT";
           const price = Number(payload.base_price || 0) / 1e18;
+          const priceInUSDTele = payload.payment_token?.usd_price
+            ? `$${(price * payload.payment_token.usd_price).toFixed(2)}`
+            : "N/A";
           const link = payload.item?.permalink || "https://opensea.io";
           const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
             4
-          )} ETH. [Check it out here](${link})\n`;
+          )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
+
+          // Send Telegram notification
+          const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
+          await sendTelegramNotification(telegramChatId, message);
+          logger.success(`📱 Telegram notification sent: ${message}`);
 
           await ninetyPlusChannel.send({ embeds: [embed] });
-          logger.success(`Send embed message to Good Deal 90 Channel.`);
+          logger.success(`Sent embed message to Good Deal 90 Channel.`);
         }
         if (isGoodEighty) {
           logger.success(
             `Recognized as a Good Deal 80! Sending to Good Deals 80 Channel.`
           );
           await eightyPlusChannel.send({ embeds: [embed] });
-          logger.success(`Send embed message to Good Deal 80 Channel.`);
+          logger.success(`Sent embed message to Good Deal 80 Channel.`);
         }
         if (isGoodSeventy) {
           logger.success(
             `Recognized as a Good Deal 70! Sending to Good Deals 70 Channel.`
           );
           await seventyPlusChannel.send({ embeds: [embed] });
-          logger.success(`Send embed message to Good Deal 70 Channel.`);
+          logger.success(`Sent embed message to Good Deal 70 Channel.`);
         }
         if (isGoodTwoFortyPlus) {
           logger.success(
             `Recognized as a Good Deal 240 Plus! Sending to Good Deals 240 Plus Channel.`
           );
           await twoFortyOverallPlusChannel.send({ embeds: [embed] });
-          logger.success(`Send embed message to Good Deal 240 Plus Channel.`);
+          logger.success(`Sent embed message to Good Deal 240 Plus Channel.`);
         }
         if (isBelowFloor) {
           logger.success(
@@ -529,7 +541,7 @@ const setupDiscordBot = async () => {
         }
       } else if (eventType === "Item Sold") {
         await salesChannel.send({ embeds: [embed] });
-        logger.success(`Send embed message to Sales Channel.`);
+        logger.success(`Sent embed message to Sales Channel.`);
       }
     } catch (error) {
       logger.error("Error while processing event:", error);
@@ -551,37 +563,59 @@ const simulateEvent = async (eventType, payload) => {
     isGoodTwoFortyPlus,
   } = await buildEmbedMessage(eventType, payload);
 
-  if (eventType === "Item Listed") {
-    // await newListingChannel.send({ embeds: [embed] });
-    if (isGoodNinety) {
-      // Send SMS for 90+ Boost
-      const nftName = payload.item?.metadata?.name || "Unnamed NFT";
-      const price = Number(payload.base_price || 0) / 1e18;
-      const link = payload.item?.permalink || "https://opensea.io";
-      const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
-        4
-      )} ETH. [Check it out here](${link})\n`;
+  const debugTelegram = process.env.DEBUG_TELEGRAM === "true";
+  const debugDiscord = process.env.DEBUG_DISCORD === "true";
 
-      // Send Telegram notification
-      const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
-      await sendTelegramNotification(telegramChatId, message);
-      logger.success(`📱 Telegram notification sent: ${message}`);
-      await ninetyPlusChannel.send({ embeds: [embed] });
+  const nftName = payload.item?.metadata?.name || "Unnamed NFT";
+  const price = Number(payload.base_price || 0) / 1e18;
+  const priceInUSDTele = payload.payment_token?.usd_price
+    ? `$${(price * payload.payment_token.usd_price).toFixed(2)}`
+    : "N/A";
+  const link = payload.item?.permalink || "https://opensea.io";
+  // FOR FUTURE TELEGRAM MSGS
+  // const message = `${nftName} is listed for ${price.toFixed(
+  //   4
+  // )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
+
+  if (eventType === "Item Listed") {
+    if (debugDiscord) {
+      await newListingChannel.send({ embeds: [embed] });
+      logger.success(`Sent embed message to New Listing Channel Channel.`);
     }
-    if (isGoodEighty) {
+    if (isGoodNinety) {
+      if (debugDiscord) {
+        await ninetyPlusChannel.send({ embeds: [embed] });
+        logger.success(`Sent embed message to Good Deal 90 Channel.`);
+      }
+      // Send Telegram Notification if debugTelegram is true
+      if (debugTelegram) {
+        const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
+          4
+        )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
+        const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
+        await sendTelegramNotification(telegramChatId, message);
+        logger.success(`📱 Telegram notification sent: ${message}`);
+      }
+    }
+    if (isGoodEighty && debugDiscord) {
       await eightyPlusChannel.send({ embeds: [embed] });
+      logger.success(`Sent embed message to Good Deal 80 Channel.`);
     }
-    if (isGoodSeventy) {
+    if (isGoodSeventy && debugDiscord) {
       await seventyPlusChannel.send({ embeds: [embed] });
+      logger.success(`Sent embed message to Good Deal 70 Channel.`);
     }
-    if (isGoodTwoFortyPlus) {
+    if (isGoodTwoFortyPlus && debugDiscord) {
       await twoFortyOverallPlusChannel.send({ embeds: [embed] });
+      logger.success(`Sent embed message to Good Deal 240 Plus Channel.`);
     }
-    if (isBelowFloor) {
+    if (isBelowFloor && debugDiscord) {
       await belowFloorChannel.send({ embeds: [embed] });
+      logger.success(`Sent embed message to Below Floor Listings Channel.`);
     }
-  } else if (eventType === "Item Sold") {
+  } else if (eventType === "Item Sold" && debugDiscord) {
     await salesChannel.send({ embeds: [embed] });
+    logger.success(`Sent embed message to Sales Channel.`);
   }
 };
 
