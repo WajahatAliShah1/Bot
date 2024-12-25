@@ -82,13 +82,20 @@ const fetchLastSaleDetails = async (chain, contractAddress, tokenId) => {
 
     let years = currentDate.getFullYear() - transactionDate.getFullYear();
     let months = currentDate.getMonth() - transactionDate.getMonth();
+    let days = 0;
 
     if (months < 0) {
       years -= 1;
       months += 12;
     }
 
-    return { years, months };
+    if (years === 0 && months === 0) {
+      // Calculate days difference
+      const diffMs = currentDate - transactionDate;
+      days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    }
+
+    return { years, months, days };
   };
 
   try {
@@ -115,13 +122,22 @@ const fetchLastSaleDetails = async (chain, contractAddress, tokenId) => {
     const timestamp = Number(lastSale.event_timestamp); // Ensure it's a number
 
     // Calculate time ago
-    const { years, months } = calculateTimeAgo(timestamp);
+    const { years, months, days } = calculateTimeAgo(timestamp);
 
-    // Dynamic formatting based on singular/plural
-    const yearText = years === 1 ? "year" : "years";
-    const monthText = months === 1 ? "month" : "months";
+    // If days > 0 => "X days ago"
+    // Else if years=0 => "X months ago"
+    // Else => "X years and X months ago"
 
-    const yearsMonthsAgo = `${years} ${yearText} and ${months} ${monthText} ago`;
+    let yearsMonthsAgo = "";
+    if (days > 0) {
+      yearsMonthsAgo = `${days} ${days === 1 ? "day" : "days"} ago`;
+    } else if (years === 0 && months > 0) {
+      yearsMonthsAgo = `${months} ${months === 1 ? "month" : "months"} ago`;
+    } else {
+      const yearText = years === 1 ? "year" : "years";
+      const monthText = months === 1 ? "month" : "months";
+      yearsMonthsAgo = `${years} ${yearText} and ${months} ${monthText} ago`;
+    }
 
     logger.info(
       `✅ Last Sale: ${ethPrice} ETH on ${new Date(
