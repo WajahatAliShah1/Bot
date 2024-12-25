@@ -624,8 +624,15 @@ const setupStreamClient = (onEvent) => {
   client.onItemSold(CONFIG.COLLECTION_SLUG, (event) =>
     handleStreamEvent("Item Sold", event.payload)
   );
-  client.connect();
-  logger.success("Connected to OpenSea Stream API.");
+  
+  // Connect
+  logger.info("Attempting to connect...");
+  try {
+    client.connect();
+    logger.success("Connected to OpenSea Stream API.");
+  } catch (err) {
+    logger.error("client.connect() error:", err?.message || err);
+  }
 };
 
 // Logger Utility
