@@ -8,6 +8,7 @@ const {
 const { OpenSeaStreamClient, Network } = require("@opensea/stream-js");
 const { WebSocket } = require("ws");
 const axios = require("axios");
+const pLimit = require("p-limit");
 const examplePayload = require("./example-listing-payload.json");
 let newListingChannel,
   ninetyPlusChannel,
@@ -15,6 +16,7 @@ let newListingChannel,
   seventyPlusChannel,
   twoFortyOverallPlusChannel,
   salesChannel,
+  // comboKongChannel,
   belowFloorChannel;
 
 // Configuration Object
@@ -26,6 +28,7 @@ const CONFIG = {
   SEVENTYPLUS_CHANNEL_ID: process.env.SEVENTYPLUS_CHANNEL_ID,
   TWOFORTY_OVERALLPLUS_CHANNEL_ID: process.env.TWOFORTY_OVERALLPLUS_CHANNEL_ID,
   SALES_CHANNEL_ID: process.env.SALES_CHANNEL_ID,
+  // COMBO_KONGS_CHANNEL_ID: process.env.COMBO_KONGS_CHANNEL_ID,
   BELOW_FLOOR_LISTING_CHANNEL_ID: process.env.BELOW_FLOOR_LISTING_CHANNEL_ID,
   OPENSEA_API_KEY: process.env.OPENSEA_API_KEY,
   COLLECTION_SLUG: process.env.COLLECTION_SLUG,
@@ -47,8 +50,13 @@ const telegramBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 const sendTelegramNotification = async (chatId, message) => {
   try {
     await telegramBot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  } catch (error) {}
+  } catch (error) {
+    logger.error("Error Sending telegram notification", error.message);
+  }
 };
+
+// Let's allow at most 5 concurrent requests at a time
+const limit = pLimit(5);
 
 // Retry Helper
 const retry = async (fn, retries = 3, delay = 3000) => {
@@ -187,6 +195,30 @@ const fetchHistoricalEthPrice = async (date) => {
     return null;
   }
 };
+
+let floorPriceCache = {
+  value: null,
+  timestamp: 0,
+};
+
+async function fetchCollectionFloorPriceCached(slug) {
+  const now = Date.now();
+  // If <60 seconds old, use cached value
+  if (floorPriceCache.value && now - floorPriceCache.timestamp < 60_000) {
+    return floorPriceCache.value;
+  }
+
+  // Otherwise, fetch fresh
+  const freshFloor = await fetchCollectionFloorPrice(slug);
+  if (freshFloor !== null) {
+    floorPriceCache.value = freshFloor;
+    floorPriceCache.timestamp = now;
+  } else {
+    // Log an error if the floor price fetch returned null
+    logger.error(`fetchCollectionFloorPriceCached null for slug="${slug}".`);
+  }
+  return floorPriceCache.value; // Could be null if the fetch failed
+}
 
 const fetchCollectionFloorPrice = async (collectionSlug) => {
   const url = `https://api.opensea.io/api/v2/collections/${collectionSlug}/stats`;
@@ -328,10 +360,8 @@ const buildEmbedMessage = async (eventType, payload) => {
     "",
   ];
 
-  const lastSaleDetails = await fetchLastSaleDetails(
-    chain,
-    contractAddress,
-    tokenId
+  const lastSaleDetails = await limit(() =>
+    fetchLastSaleDetails(chain, contractAddress, tokenId)
   );
 
   if (!lastSaleDetails) {
@@ -355,7 +385,9 @@ const buildEmbedMessage = async (eventType, payload) => {
     ).toLocaleDateString()} \n(${yearsMonthsAgo})`;
 
     // Fetch historical ETH/USD price
-    const historicalUsdPrice = await fetchHistoricalEthPrice(timestamp);
+    const historicalUsdPrice = await limit(() =>
+      fetchHistoricalEthPrice(timestamp)
+    );
     if (historicalUsdPrice) {
       lastSaleUsd = `$${(ethPrice * historicalUsdPrice).toFixed(2)}`;
     } else {
@@ -363,7 +395,10 @@ const buildEmbedMessage = async (eventType, payload) => {
     }
   }
 
-  const traits = await fetchAssetDetails("ethereum", contractAddress, tokenId);
+  // Asset Details
+  const traits = await limit(() =>
+    fetchAssetDetails("ethereum", contractAddress, tokenId)
+  );
   const findBoost = (key) =>
     traits.find(
       (trait) => trait.trait_type?.toLowerCase() === key.toLowerCase()
@@ -376,7 +411,9 @@ const buildEmbedMessage = async (eventType, payload) => {
   const overall = shooting + defense + finish + vision;
 
   // Fetch Best WETH Offer
-  const bestWethOffer = await fetchBestOffer(CONFIG.COLLECTION_SLUG, tokenId);
+  const bestWethOffer = await limit(() =>
+    fetchBestOffer(CONFIG.COLLECTION_SLUG, tokenId)
+  );
   const bestWethOfferText =
     bestWethOffer !== null
       ? `${bestWethOffer.toFixed(4)} ETH`
@@ -388,7 +425,10 @@ const buildEmbedMessage = async (eventType, payload) => {
     ? `$${(priceInETH * payment_token.usd_price).toFixed(2)}`
     : "N/A";
 
-  const floorPrice = await fetchCollectionFloorPrice(CONFIG.COLLECTION_SLUG);
+  const floorPrice = await limit(() =>
+    fetchCollectionFloorPriceCached(CONFIG.COLLECTION_SLUG)
+  );
+
   const tolerance = 0.0001;
   const isBelowFloor =
     eventType === "Item Listed" &&
@@ -411,8 +451,11 @@ const buildEmbedMessage = async (eventType, payload) => {
 
   // const is80Shooting = priceInETH < 1 && shooting >= 80;
   // const is80Vision = priceInETH < 1 && vision >= 80;
+  // const is80Defense = priceInETH < 1 && defense >= 80;
+
   // const is70Shooting = priceInETH < 1 && shooting >= 70;
   // const is70Vision = priceInETH < 1 && vision >= 70;
+  // const is70Defense = priceInETH < 1 && defense >= 70;
 
   // const is60VisionAnd80Shooting = priceInETH < 1 && vision >= 60 && shooting >= 80;
 
@@ -604,9 +647,9 @@ const setupStreamClient = (onEvent) => {
       // Check for minor price changes using absolute threshold in ETH
       const isMinorChange = history.some((entry) => {
         if (entry.seller === seller) {
-          const priceDifference =
+          const diff =
             price > entry.price ? price - entry.price : entry.price - price;
-          return priceDifference < priceChangeThreshold;
+          return diff < priceChangeThreshold;
         }
         return false;
       });
@@ -640,7 +683,7 @@ const setupStreamClient = (onEvent) => {
   client.onItemSold(CONFIG.COLLECTION_SLUG, (event) =>
     handleStreamEvent("Item Sold", event.payload)
   );
-  
+
   // Connect
   logger.info("Attempting to connect...");
   try {
@@ -657,15 +700,19 @@ const logger = {
   success: (message, ...args) => console.log(`✅ ${message}`, ...args),
   error: (message, ...args) => {
     // If the message (or any arg) matches 'Unexpected server response'
-    const shortMessage = (message && typeof message === "string" &&
-      message.includes("Unexpected server response:"))
-      ? `WS handshake error: ${message.replace("Unexpected server response: ", "")}`
-      : message;
+    const shortMessage =
+      message &&
+      typeof message === "string" &&
+      message.includes("Unexpected server response:")
+        ? `WS handshake error: ${message.replace(
+            "Unexpected server response: ",
+            ""
+          )}`
+        : message;
 
     console.error(`❌ ${shortMessage}`, ...args);
   },
 };
-
 
 // Main Discord Bot Setup
 const setupDiscordBot = async () => {
@@ -695,8 +742,13 @@ const setupDiscordBot = async () => {
   belowFloorChannel = await discordBot.channels.fetch(
     CONFIG.BELOW_FLOOR_LISTING_CHANNEL_ID
   );
+  // comboKongChannel = await discordBot.channels.fetch(
+  //   CONFIG.COMBO_KONGS_CHANNEL_ID
+  // );
 
-  logger.success("Channels fetched successfully.");
+  logger.success(
+    `Fetched newListingChannel: ${newListingChannel?.name} (ID: ${newListingChannel?.id})`
+  );
 
   setupStreamClient(async (eventType, payload) => {
     try {
@@ -720,9 +772,10 @@ const setupDiscordBot = async () => {
         ? `$${(price * payload.payment_token.usd_price).toFixed(2)}`
         : "N/A";
       const link = payload.item?.permalink || "https://opensea.io";
-      const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
-        4
-      )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
+      // FOR FUTURE TELEGRAM MSGS
+      // const message = `${nftName} is listed for ${price.toFixed(
+      //   4
+      // )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
 
       if (eventType === "Item Listed") {
         await newListingChannel.send({ embeds: [embed] });
@@ -756,6 +809,9 @@ const setupDiscordBot = async () => {
             `Recognized as a Good Deal 80! Sending to Good Deals 80 Channel.`
           );
           // Send Telegram notification
+          const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
+            4
+          )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
           const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
           await sendTelegramNotification(telegramChatId, message);
           logger.success(`📱 Telegram notification sent: ${message}`);
@@ -909,5 +965,11 @@ if (process.env.NODE_ENV === "simulate") {
   // Run the bot normally
   setupDiscordBot().catch((error) => logger.error("Bot setup failed:", error));
 }
+
+process.on("SIGTERM", () => {
+  logger.info("Received SIGTERM. Gracefully shutting down...");
+  // e.g., discordBot.destroy(), close DB connections, etc.
+  process.exit(0);
+});
 
 module.exports = { buildEmbedMessage, CONFIG };
