@@ -312,11 +312,21 @@ const buildEmbedMessage = async (eventType, payload) => {
     "",
   ];
 
-  const { ethPrice, timestamp, yearsMonthsAgo } = await fetchLastSaleDetails(
+  const lastSaleDetails = await fetchLastSaleDetails(
     chain,
     contractAddress,
     tokenId
   );
+
+  if (!lastSaleDetails) {
+    logger.info(
+      `fetchLastSaleDetails FAILED for NFT: ${contractAddress}/${tokenId}`
+    );
+  }
+
+  const ethPrice = lastSaleDetails?.ethPrice || null;
+  const timestamp = lastSaleDetails?.timestamp || null;
+  const yearsMonthsAgo = lastSaleDetails?.yearsMonthsAgo || "N/A";
 
   let lastSaleUsd = "N/A";
   let lastSaleDate = "N/A";
@@ -332,6 +342,8 @@ const buildEmbedMessage = async (eventType, payload) => {
     const historicalUsdPrice = await fetchHistoricalEthPrice(timestamp);
     if (historicalUsdPrice) {
       lastSaleUsd = `$${(ethPrice * historicalUsdPrice).toFixed(2)}`;
+    } else {
+      logger.info(`fetchHistoricalEthPrice FAILED for timestamp: ${timestamp}`);
     }
   }
 
@@ -669,6 +681,17 @@ const setupDiscordBot = async () => {
       } = await buildEmbedMessage(eventType, payload);
       logger.success(`Created embed message for "${eventType}".`);
 
+      // Send Telegram Msg for 90+ Boost
+      const nftName = payload.item?.metadata?.name || "Unnamed NFT";
+      const price = Number(payload.base_price || 0) / 1e18;
+      const priceInUSDTele = payload.payment_token?.usd_price
+        ? `$${(price * payload.payment_token.usd_price).toFixed(2)}`
+        : "N/A";
+      const link = payload.item?.permalink || "https://opensea.io";
+      const message = `${nftName} is listed with a 90+ boost for ${price.toFixed(
+        4
+      )} ETH. Or ${priceInUSDTele} USD. [Check it out here](${link}).\n`;
+
       if (eventType === "Item Listed") {
         await newListingChannel.send({ embeds: [embed] });
         logger.success(`Sent embed message to New Listing Channel Channel.`);
@@ -700,6 +723,11 @@ const setupDiscordBot = async () => {
           logger.success(
             `Recognized as a Good Deal 80! Sending to Good Deals 80 Channel.`
           );
+          // Send Telegram notification
+          const telegramChatId = process.env.TELEGRAM_CHAT_ID; // Set your Telegram Chat ID
+          await sendTelegramNotification(telegramChatId, message);
+          logger.success(`📱 Telegram notification sent: ${message}`);
+
           await eightyPlusChannel.send({ embeds: [embed] });
           logger.success(`Sent embed message to Good Deal 80 Channel.`);
         }
