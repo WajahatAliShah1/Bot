@@ -51,7 +51,7 @@ const sendTelegramNotification = async (chatId, message) => {
 };
 
 // Retry Helper
-const retry = async (fn, retries = 3, delay = 2000) => {
+const retry = async (fn, retries = 3, delay = 3000) => {
   try {
     return await fn();
   } catch (error) {
@@ -98,7 +98,7 @@ const fetchLastSaleDetails = async (chain, contractAddress, tokenId) => {
         "x-api-key": CONFIG.OPENSEA_API_KEY,
       },
       params,
-      timeout: 10000,
+      timeout: 15000,
     });
 
     const events = response.data.asset_events || [];
@@ -152,7 +152,7 @@ const fetchHistoricalEthPrice = async (date) => {
   };
 
   try {
-    const response = await axios.get(url, { params, timeout: 10000 });
+    const response = await axios.get(url, { params, timeout: 15000 });
     const usdPrice = response.data.ETH?.USD;
 
     if (!usdPrice) {
@@ -182,7 +182,7 @@ const fetchCollectionFloorPrice = async (collectionSlug) => {
         Accept: "application/json",
         "x-api-key": process.env.OPENSEA_API_KEY,
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     if (!response.data || !response.data.total?.floor_price) {
@@ -217,7 +217,7 @@ const fetchAssetDetails = async (chain, contractAddress, tokenId) => {
         Accept: "application/json",
         "x-api-key": CONFIG.OPENSEA_API_KEY,
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     if (!response.data || !response.data.nft || !response.data.nft.traits) {
@@ -252,7 +252,7 @@ const fetchBestOffer = async (collectionSlug, tokenId) => {
         Accept: "application/json",
         "x-api-key": CONFIG.OPENSEA_API_KEY,
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     // Extract best offer data from the response
@@ -639,8 +639,17 @@ const setupStreamClient = (onEvent) => {
 const logger = {
   info: (message, ...args) => console.log(`ℹ️  ${message}`, ...args),
   success: (message, ...args) => console.log(`✅ ${message}`, ...args),
-  error: (message, ...args) => console.error(`❌ ${message}`, ...args),
+  error: (message, ...args) => {
+    // If the message (or any arg) matches 'Unexpected server response'
+    const shortMessage = (message && typeof message === "string" &&
+      message.includes("Unexpected server response:"))
+      ? `WS handshake error: ${message.replace("Unexpected server response: ", "")}`
+      : message;
+
+    console.error(`❌ ${shortMessage}`, ...args);
+  },
 };
+
 
 // Main Discord Bot Setup
 const setupDiscordBot = async () => {
