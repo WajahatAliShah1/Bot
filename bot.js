@@ -435,13 +435,13 @@ const buildEmbedMessage = async (eventType, payload) => {
     floorPrice !== null &&
     priceInETH < floorPrice - tolerance;
   const isGoodNinety =
-    priceInETH < 1 &&
-    [shooting, defense, finish, vision].some((stat) => stat >= 90);
+    priceInETH < 5 &&
+    [shooting, defense, finish, vision].some((stat) => stat >= 90 && stat <= 100);
   const isGoodEighty =
-    priceInETH < 1 &&
+    priceInETH < 5 &&
     [shooting, defense, finish, vision].some((stat) => stat >= 80 && stat < 90);
   const isGoodSeventy =
-    priceInETH < 1 &&
+    priceInETH < 5 &&
     [shooting, defense, finish, vision].some((stat) => stat >= 70 && stat < 80);
   const isGoodTwoFortyPlus = priceInETH < 1 && overall >= 240;
 
